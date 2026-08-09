@@ -112,7 +112,6 @@ function pickLocale(value: unknown): Locale | null {
 }
 
 const base = i18n.flatten(desktopEn)
-
 function build(locale: Locale): Dictionary {
   if (locale === "en") return base
   if (locale === "zh") return { ...base, ...i18n.flatten(desktopZh) }
