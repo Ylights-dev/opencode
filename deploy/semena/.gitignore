@@ -1,0 +1,7 @@
+.env
+tls/*.key
+tls/*.srl
+artifacts/
+data/
+__pycache__/
+.pytest_cache/

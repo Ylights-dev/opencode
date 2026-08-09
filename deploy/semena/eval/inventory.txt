@@ -1,0 +1,2 @@
+carrot=10
+tomato=7

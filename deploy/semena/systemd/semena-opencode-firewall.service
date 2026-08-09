@@ -1,0 +1,14 @@
+[Unit]
+Description=Restrict direct Ollama access to trusted infrastructure
+After=network-online.target docker.service ollama.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/semena-opencode
+ExecStart=/opt/semena-opencode/scripts/apply_firewall.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+
