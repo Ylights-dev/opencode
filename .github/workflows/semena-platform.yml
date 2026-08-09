@@ -1,0 +1,25 @@
+name: Semena platform
+
+on:
+  push:
+    paths:
+      - "deploy/semena/**"
+      - ".github/workflows/semena-platform.yml"
+  pull_request:
+    paths:
+      - "deploy/semena/**"
+      - ".github/workflows/semena-platform.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/semena
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -W error::ResourceWarning -m unittest discover -s tests -v
+      - run: docker compose --env-file .env.example config --quiet
