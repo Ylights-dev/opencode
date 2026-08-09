@@ -66,6 +66,9 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("Copy-Item -LiteralPath $certificatePath", installer)
         self.assertIn("NODE_EXTRA_CA_CERTS", installer)
         self.assertIn("SSL_CERT_FILE", installer)
+        self.assertIn("XDG_CONFIG_HOME", installer)
+        self.assertIn("XDG_DATA_HOME", installer)
+        self.assertIn("XDG_CACHE_HOME", installer)
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
