@@ -20,7 +20,7 @@ import auth_server  # noqa: E402
 class ClientConfigTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.config = json.loads((ROOT / "client" / "agent-config.json").read_text(encoding="utf-8"))
+        cls.config = json.loads((ROOT / "client" / "Служебные файлы" / "agent-config.json").read_text(encoding="utf-8"))
 
     def test_gateway_is_tls_and_not_direct_ollama(self) -> None:
         options = self.config["provider"]["semena"]["options"]
@@ -35,10 +35,12 @@ class ClientConfigTests(unittest.TestCase):
         self.assertEqual(self.config["enabled_providers"], ["semena"])
         self.assertEqual(self.config["model"], "semena/semena-code")
 
-    def test_workspace_boundary_and_secret_reads_are_denied(self) -> None:
+    def test_agent_can_run_scripts_and_use_tools(self) -> None:
         permission = self.config["permission"]
-        self.assertEqual(permission["external_directory"], "deny")
-        self.assertEqual(permission["bash"], "deny")
+        self.assertEqual(permission["external_directory"], "ask")
+        self.assertEqual(permission["bash"], "allow")
+        for tool in ["edit", "glob", "grep", "list", "task", "todowrite", "lsp", "skill", "webfetch", "websearch"]:
+            self.assertEqual(permission[tool], "allow", tool)
         self.assertEqual(permission["read"]["*.env"], "deny")
         self.assertEqual(permission["read"]["*.key"], "deny")
 
@@ -54,14 +56,14 @@ class DeploymentTests(unittest.TestCase):
         candidates = [
             ROOT / "compose.yaml",
             ROOT / "auth_server.py",
-            ROOT / "client" / "agent-config.json",
+            ROOT / "client" / "Служебные файлы" / "agent-config.json",
         ]
         secret = re.compile(r"(?:ghp_|github_pat_|sk-[A-Za-z0-9_-]{20,})")
         for path in candidates:
             self.assertIsNone(secret.search(path.read_text(encoding="utf-8")), path)
 
     def test_installer_pins_version_and_checksum(self) -> None:
-        installer = (ROOT / "client" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
+        installer = (ROOT / "client" / "Служебные файлы" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
         self.assertRegex(installer, r"\$expectedHash = '[A-F0-9]{64}'")
         self.assertIn("Get-FileHash", installer)
         self.assertIn("Import-Certificate", installer)
@@ -69,7 +71,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn("github.com", installer)
 
     def test_installer_uses_open_webui_login_and_pins_ca_for_runtime(self) -> None:
-        installer = (ROOT / "client" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
+        installer = (ROOT / "client" / "Служебные файлы" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
         self.assertIn("Введите e-mail от корпоративной веб-панели", installer)
         self.assertIn("Введите пароль от корпоративной веб-панели", installer)
         self.assertIn("$ProgressPreference = 'SilentlyContinue'", installer)
@@ -80,12 +82,24 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("автоматически привязано", installer)
 
     def test_double_click_installer_wrapper_exists(self) -> None:
-        wrapper = (ROOT / "client" / "Install-SemenaAgent.cmd").read_text(encoding="utf-8-sig")
+        wrapper = (ROOT / "client" / "Установить Семена - Агент.cmd").read_text(encoding="utf-8-sig")
         self.assertIn("ExecutionPolicy Bypass", wrapper)
-        self.assertIn("Install-SemenaAgent.ps1", wrapper)
+        self.assertIn("Служебные файлы\\Install-SemenaAgent.ps1", wrapper)
         self.assertNotIn("Installation completed", wrapper)
         self.assertNotIn("Installation failed", wrapper)
         self.assertIn("pause", wrapper)
+        self.assertIn("Установка", wrapper)
+
+    def test_client_bundle_has_single_human_entrypoint(self) -> None:
+        root = ROOT / "client"
+        support = root / "Служебные файлы"
+        self.assertTrue((root / "Установить Семена - Агент.cmd").is_file())
+        self.assertTrue((root / "Прочти меня - установка.txt").is_file())
+        self.assertTrue(support.is_dir())
+        self.assertFalse((root / "Install-SemenaAgent.cmd").exists())
+        self.assertFalse((root / "Install-SemenaAgent.ps1").exists())
+        for name in ["Install-SemenaAgent.ps1", "agent-config.json", "AGENTS.md", "semena-agent-ca.crt"]:
+            self.assertTrue((support / name).is_file(), name)
 
     def test_desktop_branding_and_identity_are_isolated(self) -> None:
         desktop = ROOT.parents[1] / "packages" / "desktop"
@@ -94,11 +108,14 @@ class DeploymentTests(unittest.TestCase):
         wordmark = (
             ROOT.parents[1] / "packages" / "ui" / "src" / "v2" / "components" / "wordmark-v2.tsx"
         ).read_text(encoding="utf-8")
+        onboarding = (desktop / "src" / "main" / "onboarding.ts").read_text(encoding="utf-8")
         self.assertIn("ru.sibsemena.agent", builder)
         self.assertIn("Семена - Агент", builder)
         self.assertIn("<title>Семена - Агент</title>", renderer)
         self.assertIn("СЕМЕНА - АГЕНТ", wordmark)
         self.assertNotIn("opencode", wordmark.lower())
+        self.assertIn("Семена - Агент", onboarding)
+        self.assertNotIn("Default Project", onboarding)
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")

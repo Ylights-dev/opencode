@@ -32,6 +32,7 @@ can revoke a single key, and prevents direct employee access to Ollama.
 - Open WebUI is the identity source; passwords are verified during enrollment
   and are never stored by the Semena gateway.
 - Ollama is bound to the server and must not be the employee-facing endpoint.
-- OpenCode permissions deny access outside the approved workspace by default.
+- OpenCode permissions allow read/edit/write/search/shell tools in the active
+  project workspace and ask before accessing external directories.
 - OpenClaw is reserved for a separately isolated administrator gateway if ACP
   dispatch is needed later.

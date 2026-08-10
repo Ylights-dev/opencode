@@ -11,9 +11,11 @@ Assessment date: 2026-08-09.
   desktop, headless server, and web clients.
 - The built-in network authentication is one Basic Auth username/password for a
   server. It is not employee identity or workspace isolation.
-- OpenCode permissions can deny external paths, but a live test showed that a
-  model may retry a denied `read` through `bash`. The employee profile therefore
-  denies `bash` completely instead of relying only on `external_directory`.
+- OpenCode permissions can deny or ask for external paths. The employee profile
+  now allows shell/scripts and the built-in agent tools inside the active project
+  because the product requirement is full local automation in the selected
+  working folder. Access outside that folder remains an explicit prompt through
+  `external_directory`.
 
 ## OpenClaw
 
@@ -51,7 +53,7 @@ Do not deploy OpenClaw in the employee request path. Do not expose Ollama port
 ## Remaining product boundary
 
 This deployment proves the agent loop, local file edits, identity, revocation,
-TLS, and network isolation. OpenCode does not automatically reproduce the old
+TLS, script execution, and network isolation. OpenCode does not automatically reproduce the old
 agent's domain-specific Excel, Word, registry, SQL, and 1C operations. Those
 capabilities should be migrated as narrowly scoped tools or skills with their own
-tests; arbitrary shell access stays disabled in the employee profile.
+tests; arbitrary shell access is available in the active project workspace.
