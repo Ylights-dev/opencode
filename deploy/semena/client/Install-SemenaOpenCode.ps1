@@ -6,6 +6,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+function Ru([string]$Base64) {
+    return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Base64))
+}
+
 $version = '1.18.15'
 $downloadUrls = @(
     "http://10.1.50.101:3010/downloads/opencode-windows-x64-$version.zip",
@@ -24,17 +30,17 @@ $sourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $certificatePath = Join-Path $sourceRoot 'semena-opencode-ca.crt'
 
 if (-not (Test-Path -LiteralPath $certificatePath)) {
-    throw 'Corporate CA certificate is missing from the installer directory'
+    throw (Ru '0J3QtSDQvdCw0LnQtNC10L0g0LrQvtGA0L/QvtGA0LDRgtC40LLQvdGL0Lkg0YHQtdGA0YLQuNGE0LjQutCw0YIg0LIg0L/QsNC/0LrQtSDRg9GB0YLQsNC90L7QstGJ0LjQutCw')
 }
 Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 if (-not $ApiKey) {
-    $email = (Read-Host 'Enter your Open WebUI email').Trim().ToLowerInvariant()
+    $email = (Read-Host (Ru '0JLQstC10LTQuNGC0LUgZS1tYWlsINC+0YIgT3BlbiBXZWJVSQ==')).Trim().ToLowerInvariant()
     if ($email -notmatch '^[^@\s]+@[^@\s]+$') {
-        throw 'The Open WebUI email has an invalid format'
+        throw (Ru '0J3QtdCy0LXRgNC90YvQuSDRhNC+0YDQvNCw0YIgZS1tYWlsIE9wZW4gV2ViVUk=')
     }
-    $securePassword = Read-Host 'Enter your Open WebUI password' -AsSecureString
+    $securePassword = Read-Host (Ru '0JLQstC10LTQuNGC0LUg0L/QsNGA0L7Qu9GMINC+0YIgT3BlbiBXZWJVSQ==') -AsSecureString
     $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
     try {
         $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
@@ -44,7 +50,7 @@ if (-not $ApiKey) {
             $ApiKey = $enrollment.key
         }
         catch {
-            throw 'Open WebUI sign-in failed. Check your email and password, then run the installer again.'
+            throw (Ru '0J3QtSDRg9C00LDQu9C+0YHRjCDQstC+0LnRgtC4INCyIE9wZW4gV2ViVUkuINCf0YDQvtCy0LXRgNGM0YLQtSBlLW1haWwg0Lgg0L/QsNGA0L7Qu9GMLCDQt9Cw0YLQtdC8INC30LDQv9GD0YHRgtC40YLQtSDRg9GB0YLQsNC90L7QstC60YMg0YHQvdC+0LLQsC4=')
         }
     }
     finally {
@@ -54,7 +60,7 @@ if (-not $ApiKey) {
     }
 }
 if ($ApiKey -notmatch '^sk-[A-Za-z0-9_-]{16,}$') {
-    throw 'The Semena OpenCode access key has an invalid format'
+    throw (Ru '0J3QtSDRg9C00LDQu9C+0YHRjCDQv9C+0LvRg9GH0LjRgtGMINC60LvRjtGHINC00L7RgdGC0YPQv9CwIFNlbWVuYSBPcGVuQ29kZQ==')
 }
 
 New-Item -ItemType Directory -Force -Path $installRoot, $binRoot, $configRoot, $dataHome, $cacheHome, $Workspace | Out-Null
@@ -67,11 +73,11 @@ foreach ($downloadUrl in $downloadUrls) {
         break
     }
     catch {
-        Write-Warning "Download failed from $downloadUrl"
+        Write-Warning ((Ru '0J3QtSDRg9C00LDQu9C+0YHRjCDRgdC60LDRh9Cw0YLRjCDRgSDQsNC00YDQtdGB0LA6IA==') + $downloadUrl)
     }
 }
 if (-not $downloaded) {
-    throw 'Could not download the verified OpenCode archive'
+    throw (Ru '0J3QtSDRg9C00LDQu9C+0YHRjCDRgdC60LDRh9Cw0YLRjCDQv9GA0L7QstC10YDQtdC90L3Ri9C5INCw0YDRhdC40LIgT3BlbkNvZGU=')
 }
 $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 if ($actualHash -ne $expectedHash) {
@@ -81,7 +87,7 @@ if ($actualHash -ne $expectedHash) {
 Expand-Archive -LiteralPath $archive -DestinationPath $binRoot -Force
 $binary = Get-ChildItem -LiteralPath $binRoot -Recurse -Filter 'opencode.exe' | Select-Object -First 1
 if (-not $binary) {
-    throw 'opencode.exe was not found in the verified archive'
+    throw (Ru '0JIg0YHQutCw0YfQsNC90L3QvtC8INCw0YDRhdC40LLQtSDQvdC1INC90LDQudC00LXQvSBvcGVuY29kZS5leGU=')
 }
 if ($binary.DirectoryName -ne $binRoot) {
     Copy-Item -LiteralPath $binary.FullName -Destination (Join-Path $binRoot 'opencode.exe') -Force
@@ -121,5 +127,5 @@ $shortcut.Description = 'Semena OpenCode local corporate AI'
 $shortcut.Save()
 
 Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
-Write-Host "OpenCode $version installed. Workspace: $Workspace"
-Write-Host "Start it with the 'Semena OpenCode' desktop shortcut."
+Write-Host ("OpenCode $version" + (Ru 'INGD0YHRgtCw0L3QvtCy0LvQtdC9LiDQoNCw0LHQvtGH0LDRjyDQv9Cw0L/QutCwOiA=') + $Workspace)
+Write-Host (Ru '0JfQsNC/0YPRgdC60LDQudGC0LUg0LXQs9C+INGP0YDQu9GL0LrQvtC8IMKrU2VtZW5hIE9wZW5Db2Rlwrsg0L3QsCDRgNCw0LHQvtGH0LXQvCDRgdGC0L7Qu9C1Lg==')

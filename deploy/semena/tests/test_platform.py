@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import pathlib
@@ -67,10 +68,17 @@ class DeploymentTests(unittest.TestCase):
 
     def test_installer_uses_open_webui_login_and_pins_ca_for_runtime(self) -> None:
         installer = (ROOT / "client" / "Install-SemenaOpenCode.ps1").read_text(encoding="utf-8")
-        self.assertIn("Read-Host 'Enter your Open WebUI email'", installer)
-        self.assertIn("Read-Host 'Enter your Open WebUI password' -AsSecureString", installer)
+        russian_strings = {
+            base64.b64decode(value).decode("utf-8")
+            for value in re.findall(r"Ru '([A-Za-z0-9+/=]+)'", installer)
+        }
+        self.assertIn("Введите e-mail от Open WebUI", russian_strings)
+        self.assertIn("Введите пароль от Open WebUI", russian_strings)
+        self.assertIn("$ProgressPreference = 'SilentlyContinue'", installer)
         self.assertIn("https://10.1.50.101:8443/enroll", installer)
         self.assertIn("Invoke-RestMethod -Method Post", installer)
+        self.assertNotIn("Enter your Open WebUI email", installer)
+        self.assertNotIn("Enter your Open WebUI password", installer)
         self.assertNotIn("Enter your Semena OpenCode access key", installer)
         self.assertIn("Copy-Item -LiteralPath $certificatePath", installer)
         self.assertIn("NODE_EXTRA_CA_CERTS", installer)
@@ -84,7 +92,8 @@ class DeploymentTests(unittest.TestCase):
         wrapper = (ROOT / "client" / "Install-SemenaOpenCode.cmd").read_text(encoding="utf-8")
         self.assertIn("ExecutionPolicy Bypass", wrapper)
         self.assertIn("Install-SemenaOpenCode.ps1", wrapper)
-        self.assertIn("Installation completed", wrapper)
+        self.assertNotIn("Installation completed", wrapper)
+        self.assertNotIn("Installation failed", wrapper)
         self.assertIn("pause", wrapper)
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
