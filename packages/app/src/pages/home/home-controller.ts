@@ -34,6 +34,12 @@ export function createHomeController() {
       projects().find((project) => project.worktree === focusedServerCtx()?.projects.last()) ??
       projects()[0],
   )
+  const defaultProjectDirectory = createMemo(() => {
+    const home = homedir()
+    if (!home) return undefined
+    const separator = home.includes("\\") ? "\\" : "/"
+    return `${home}${separator}Documents${separator}Семена - Агент`
+  })
 
   createEffect(() => {
     const list = global.servers.list()
@@ -50,7 +56,15 @@ export function createHomeController() {
     const ctx = global.ensureServerCtx(conn)
     ctx.projects.open(directory)
     ctx.projects.touch(directory)
+    ctx.sync.child(directory, { bootstrap: false })
     void tabs.newDraft({ server: ServerConnection.key(conn), directory })
+  }
+
+  function openDefaultProjectNewSession(conn: ServerConnection.Any) {
+    const directory = defaultProjectDirectory()
+    if (!directory) return
+    openProjectNewSession(conn, directory)
+    setSelection({ server: ServerConnection.key(conn), directory })
   }
 
   return {
@@ -109,9 +123,13 @@ export function createHomeController() {
       },
       openNewSession: () => {
         const conn = focusedServer()
+        if (!conn) return
         const project = newSessionProject()
-        if (!conn || !project) return
-        openProjectNewSession(conn, project.worktree)
+        if (project) {
+          openProjectNewSession(conn, project.worktree)
+          return
+        }
+        openDefaultProjectNewSession(conn)
       },
       openProjectNewSession,
     },

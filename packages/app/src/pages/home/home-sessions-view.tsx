@@ -508,27 +508,34 @@ function HomeSessionProjectName(props: { name: string; search?: boolean }) {
 
 function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnType<typeof useLanguage> }) {
   return (
-    <div class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center">
+    <div class="flex min-h-full flex-col items-center gap-5 px-6 pt-[52px] text-center">
       <div
         class={`
-          shrink-0 text-[13px] leading-[13px] tracking-[-0.04px]
+          shrink-0 text-[17px] leading-6 tracking-[-0.04px]
           text-v2-text-text-base [font-weight:530]
         `}
       >
-        {props.language.t("home.sessions.empty")}
+        Начните работу
       </div>
       <p
         class={`
-          mb-1 text-center text-[13px] leading-5 tracking-[-0.04px]
+          max-w-[360px] text-center text-[13px] leading-5 tracking-[-0.04px]
           text-v2-text-text-muted [font-weight:440]
         `}
       >
-        {props.language.t("home.sessions.empty.description")}
+        Создайте новую сессию в рабочей папке «Семена - Агент» и сразу задайте вопрос модели.
       </p>
       <Show when={props.onNewSession}>
         {(onNewSession) => (
-          <ButtonV2 data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
-            {props.language.t("command.session.new")}
+          <ButtonV2
+            data-action="home-new-session-empty"
+            variant="contrast"
+            size="large"
+            icon="edit"
+            class="mt-1 px-5"
+            onClick={onNewSession()}
+          >
+            Создать новую сессию
           </ButtonV2>
         )}
       </Show>

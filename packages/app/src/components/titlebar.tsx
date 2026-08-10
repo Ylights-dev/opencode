@@ -261,6 +261,25 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               tabsStoreActions.removeSessions(detail)
             })
 
+            const defaultProjectDirectory = (conn: ServerConnection.Any) => {
+              const home = global.ensureServerCtx(conn).sync.data.path.home
+              if (!home) return
+              const separator = home.includes("\\") ? "\\" : "/"
+              return `${home}${separator}Documents${separator}Семена - Агент`
+            }
+
+            const openDefaultNewTab = (conn: ServerConnection.Any | undefined) => {
+              if (!conn) return false
+              const directory = defaultProjectDirectory(conn)
+              if (!directory) return false
+              const ctx = global.ensureServerCtx(conn)
+              ctx.projects.open(directory)
+              ctx.projects.touch(directory)
+              ctx.sync.child(directory, { bootstrap: false })
+              tabs.newDraft({ server: ServerConnection.key(conn), directory }, "")
+              return true
+            }
+
             const openNewTab = () => {
               const route = layout.route()
               const activeSession = session()
@@ -295,6 +314,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
                   return
                 }
+                if (openDefaultNewTab(conn)) return
               }
 
               const current = layout.projects.list()[0]
@@ -307,9 +327,12 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 const project = global.ensureServerCtx(conn).projects.list()[0]
                 return project ? [{ server: ServerConnection.key(conn), project }] : []
               })[0]
-              if (!fallback) return
+              if (fallback) {
+                tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+                return
+              }
 
-              tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
+              if (openDefaultNewTab(server.current ?? global.servers.list()[0])) return
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
