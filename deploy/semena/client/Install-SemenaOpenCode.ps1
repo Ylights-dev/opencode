@@ -19,15 +19,38 @@ $configRoot = Join-Path $configHome 'opencode'
 $dataHome = Join-Path $installRoot 'data'
 $cacheHome = Join-Path $installRoot 'cache'
 $archive = Join-Path $env:TEMP "opencode-$version.zip"
+$enrollUrl = 'https://10.1.50.101:8443/enroll'
+$sourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$certificatePath = Join-Path $sourceRoot 'semena-opencode-ca.crt'
+
+if (-not (Test-Path -LiteralPath $certificatePath)) {
+    throw 'Corporate CA certificate is missing from the installer directory'
+}
+Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 if (-not $ApiKey) {
-    $secureApiKey = Read-Host 'Enter your Semena OpenCode access key' -AsSecureString
-    $keyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureApiKey)
+    $email = (Read-Host 'Enter your Open WebUI email').Trim().ToLowerInvariant()
+    if ($email -notmatch '^[^@\s]+@[^@\s]+$') {
+        throw 'The Open WebUI email has an invalid format'
+    }
+    $securePassword = Read-Host 'Enter your Open WebUI password' -AsSecureString
+    $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
     try {
-        $ApiKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($keyPointer)
+        $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+        $requestBody = @{ email = $email; password = $plainPassword } | ConvertTo-Json -Compress
+        try {
+            $enrollment = Invoke-RestMethod -Method Post -Uri $enrollUrl -ContentType 'application/json' -Body $requestBody
+            $ApiKey = $enrollment.key
+        }
+        catch {
+            throw 'Open WebUI sign-in failed. Check your email and password, then run the installer again.'
+        }
     }
     finally {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPointer)
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
+        $plainPassword = $null
+        $requestBody = $null
     }
 }
 if ($ApiKey -notmatch '^sk-[A-Za-z0-9_-]{16,}$') {
@@ -66,17 +89,11 @@ if ($binary.DirectoryName -ne $binRoot) {
 
 [Environment]::SetEnvironmentVariable('SEMENA_OPENCODE_API_KEY', $ApiKey, 'User')
 
-$sourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'opencode.json') -Destination (Join-Path $configRoot 'opencode.json') -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'AGENTS.md') -Destination (Join-Path $Workspace 'AGENTS.md') -Force
 
-$certificatePath = Join-Path $sourceRoot 'semena-opencode-ca.crt'
-if (-not (Test-Path -LiteralPath $certificatePath)) {
-    throw 'Corporate CA certificate is missing from the installer directory'
-}
 $installedCertificatePath = Join-Path $installRoot 'semena-opencode-ca.crt'
 Copy-Item -LiteralPath $certificatePath -Destination $installedCertificatePath -Force
-Import-Certificate -FilePath $certificatePath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
 
 $launcherPath = Join-Path $installRoot 'Start-SemenaOpenCode.ps1'
 $launcher = @"

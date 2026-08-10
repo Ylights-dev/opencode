@@ -15,6 +15,7 @@ identity or workspace isolation.
 ```text
 Employee Windows account
   -> OpenCode Desktop / local OpenCode server
+  -> one-time enrollment with Open WebUI email/password over TLS
   -> per-user API key
   -> TLS gateway with per-user API-key authentication on 10.1.50.101
   -> Ollama on 127.0.0.1:11434
@@ -28,6 +29,8 @@ can revoke a single key, and prevents direct employee access to Ollama.
 ## Security boundary
 
 - One key per employee; no shared OpenCode server password.
+- Open WebUI is the identity source; passwords are verified during enrollment
+  and are never stored by the Semena gateway.
 - Ollama is bound to the server and must not be the employee-facing endpoint.
 - OpenCode permissions deny access outside the approved workspace by default.
 - OpenClaw is reserved for a separately isolated administrator gateway if ACP

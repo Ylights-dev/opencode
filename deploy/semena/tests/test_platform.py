@@ -7,6 +7,9 @@ import re
 import sys
 import tempfile
 import unittest
+from contextlib import closing
+from io import BytesIO
+from urllib.error import HTTPError
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -62,9 +65,13 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("http://10.1.50.101:3010/downloads/opencode-windows-x64-$version.zip", installer)
         self.assertIn("https://github.com/anomalyco/opencode/releases/download/v$version/", installer)
 
-    def test_installer_prompts_securely_and_pins_ca_for_runtime(self) -> None:
+    def test_installer_uses_open_webui_login_and_pins_ca_for_runtime(self) -> None:
         installer = (ROOT / "client" / "Install-SemenaOpenCode.ps1").read_text(encoding="utf-8")
-        self.assertIn("Read-Host 'Enter your Semena OpenCode access key' -AsSecureString", installer)
+        self.assertIn("Read-Host 'Enter your Open WebUI email'", installer)
+        self.assertIn("Read-Host 'Enter your Open WebUI password' -AsSecureString", installer)
+        self.assertIn("https://10.1.50.101:8443/enroll", installer)
+        self.assertIn("Invoke-RestMethod -Method Post", installer)
+        self.assertNotIn("Enter your Semena OpenCode access key", installer)
         self.assertIn("Copy-Item -LiteralPath $certificatePath", installer)
         self.assertIn("NODE_EXTRA_CA_CERTS", installer)
         self.assertIn("SSL_CERT_FILE", installer)
@@ -109,6 +116,16 @@ class DeploymentTests(unittest.TestCase):
         self.assertTrue((ROOT / "scripts" / "revoke_user.sh").is_file())
         self.assertTrue((ROOT / "scripts" / "list_users.sh").is_file())
 
+    def test_enrollment_is_tls_rate_limited_and_not_exposed_by_auth_port(self) -> None:
+        nginx = (ROOT / "nginx.conf").read_text(encoding="utf-8")
+        compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("location = /enroll", nginx)
+        self.assertIn("zone=enroll_per_ip", nginx)
+        self.assertIn("limit_req_status 429", nginx)
+        self.assertIn("client_max_body_size 8k", nginx)
+        self.assertIn("OPEN_WEBUI_SIGNIN_URL", compose)
+        self.assertNotRegex(compose, r'(?m)^\s*ports:\s*\n\s*-.*8080')
+
 
 class AuthTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -143,6 +160,65 @@ class AuthTests(unittest.TestCase):
     def test_invalid_email_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             auth_server.create_user("not-an-email")
+
+    def test_open_webui_credentials_are_verified_without_storing_password(self) -> None:
+        password = "correct-horse-battery-staple"
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, limit):
+                return json.dumps(
+                    {"id": "owui-1", "email": "user@example.com", "role": "user"}
+                ).encode()
+
+        def opener(request, timeout):
+            self.assertEqual(timeout, 10)
+            submitted = json.loads(request.data.decode())
+            self.assertEqual(submitted, {"email": "user@example.com", "password": password})
+            return Response()
+
+        identity = auth_server.verify_open_webui_credentials(
+            "User@Example.com", password, opener=opener
+        )
+        result = auth_server.create_user(identity["email"])
+        database = pathlib.Path(os.environ["AUTH_DB"]).read_bytes()
+        self.assertEqual(identity["role"], "user")
+        self.assertEqual(auth_server.authenticate(result["key"]), "user@example.com")
+        self.assertNotIn(password.encode(), database)
+
+    def test_open_webui_rejection_does_not_issue_key(self) -> None:
+        def opener(request, timeout):
+            raise HTTPError(request.full_url, 401, "Unauthorized", {}, BytesIO())
+
+        with self.assertRaises(auth_server.InvalidCredentialsError):
+            auth_server.verify_open_webui_credentials(
+                "user@example.com", "wrong-password", opener=opener
+            )
+        with closing(auth_server.connect()) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM users").fetchone()[0], 0)
+
+    def test_open_webui_identity_must_match_requested_email(self) -> None:
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, limit):
+                return json.dumps(
+                    {"id": "owui-2", "email": "other@example.com", "role": "admin"}
+                ).encode()
+
+        with self.assertRaises(auth_server.InvalidCredentialsError):
+            auth_server.verify_open_webui_credentials(
+                "user@example.com", "password", opener=lambda request, timeout: Response()
+            )
 
 
 if __name__ == "__main__":

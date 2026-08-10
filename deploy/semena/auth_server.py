@@ -15,9 +15,20 @@ import sqlite3
 from contextlib import closing
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$")
+MAX_REQUEST_BYTES = 8192
+
+
+class InvalidCredentialsError(Exception):
+    pass
+
+
+class IdentityProviderError(Exception):
+    pass
 
 
 def database_path() -> str:
@@ -55,6 +66,52 @@ def normalize_email(value: str) -> str:
     if not EMAIL_RE.fullmatch(email):
         raise ValueError("invalid employee email")
     return email
+
+
+def open_webui_signin_url() -> str:
+    return os.environ.get(
+        "OPEN_WEBUI_SIGNIN_URL",
+        "http://host.docker.internal:3000/api/v1/auths/signin",
+    )
+
+
+def verify_open_webui_credentials(
+    email_value: str,
+    password: str,
+    opener=urlopen,
+) -> dict[str, str]:
+    email = normalize_email(email_value)
+    if not isinstance(password, str) or not password or len(password) > 1024:
+        raise InvalidCredentialsError
+    body = json.dumps({"email": email, "password": password}).encode("utf-8")
+    request = Request(
+        open_webui_signin_url(),
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with opener(request, timeout=10) as response:
+            payload = json.loads(response.read(MAX_REQUEST_BYTES).decode("utf-8"))
+    except HTTPError as error:
+        if error.code in (HTTPStatus.BAD_REQUEST, HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
+            raise InvalidCredentialsError from None
+        raise IdentityProviderError from error
+    except (URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise IdentityProviderError from error
+
+    try:
+        verified_email = normalize_email(str(payload.get("email", "")))
+    except ValueError:
+        raise IdentityProviderError from None
+    role = str(payload.get("role", ""))
+    if verified_email != email or role not in ("user", "admin"):
+        raise InvalidCredentialsError
+    return {
+        "email": verified_email,
+        "role": role,
+        "user_id": str(payload.get("id", "")),
+    }
 
 
 def create_user(email_value: str) -> dict[str, str]:
@@ -104,7 +161,16 @@ def authenticate(token: str) -> str | None:
 
 
 class AuthHandler(BaseHTTPRequestHandler):
-    server_version = "SemenaAuth/1.0"
+    server_version = "SemenaAuth/1.1"
+
+    def send_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -126,6 +192,43 @@ class AuthHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("X-Employee-Email", email)
         self.end_headers()
+
+    def do_POST(self) -> None:
+        if self.path != "/enroll":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length < 2 or length > MAX_REQUEST_BYTES:
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError
+            identity = verify_open_webui_credentials(
+                str(payload.get("email", "")),
+                payload.get("password", ""),
+            )
+            result = create_user(identity["email"])
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        except InvalidCredentialsError:
+            self.send_json(HTTPStatus.UNAUTHORIZED, {"error": "invalid_credentials"})
+            return
+        except IdentityProviderError:
+            self.send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "identity_provider_unavailable"},
+            )
+            return
+        self.send_json(
+            HTTPStatus.CREATED,
+            {"email": result["email"], "key": result["key"]},
+        )
 
     def log_message(self, format_string: str, *args: object) -> None:
         return
