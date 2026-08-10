@@ -59,6 +59,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertRegex(installer, r"\$expectedHash = '[A-F0-9]{64}'")
         self.assertIn("Get-FileHash", installer)
         self.assertIn("Import-Certificate", installer)
+        self.assertIn("http://10.1.50.101:3010/downloads/opencode-windows-x64-$version.zip", installer)
+        self.assertIn("https://github.com/anomalyco/opencode/releases/download/v$version/", installer)
 
     def test_installer_prompts_securely_and_pins_ca_for_runtime(self) -> None:
         installer = (ROOT / "client" / "Install-SemenaOpenCode.ps1").read_text(encoding="utf-8")
@@ -69,6 +71,14 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("XDG_CONFIG_HOME", installer)
         self.assertIn("XDG_DATA_HOME", installer)
         self.assertIn("XDG_CACHE_HOME", installer)
+        self.assertIn("--port 4097", installer)
+
+    def test_double_click_installer_wrapper_exists(self) -> None:
+        wrapper = (ROOT / "client" / "Install-SemenaOpenCode.cmd").read_text(encoding="utf-8")
+        self.assertIn("ExecutionPolicy Bypass", wrapper)
+        self.assertIn("Install-SemenaOpenCode.ps1", wrapper)
+        self.assertIn("Installation completed", wrapper)
+        self.assertIn("pause", wrapper)
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")

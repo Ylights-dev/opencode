@@ -7,7 +7,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $version = '1.18.15'
-$downloadUrl = "https://github.com/anomalyco/opencode/releases/download/v$version/opencode-windows-x64.zip"
+$downloadUrls = @(
+    "http://10.1.50.101:3010/downloads/opencode-windows-x64-$version.zip",
+    "https://github.com/anomalyco/opencode/releases/download/v$version/opencode-windows-x64.zip"
+)
 $expectedHash = 'A80785874978CCBB93B7BFE4345F5AED41696F5AE76C109CD6DBBB934DBE795D'
 $installRoot = Join-Path $env:LOCALAPPDATA 'Semena OpenCode'
 $binRoot = Join-Path $installRoot 'bin'
@@ -33,7 +36,20 @@ if ($ApiKey -notmatch '^sk-[A-Za-z0-9_-]{16,}$') {
 
 New-Item -ItemType Directory -Force -Path $installRoot, $binRoot, $configRoot, $dataHome, $cacheHome, $Workspace | Out-Null
 
-Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archive
+$downloaded = $false
+foreach ($downloadUrl in $downloadUrls) {
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archive
+        $downloaded = $true
+        break
+    }
+    catch {
+        Write-Warning "Download failed from $downloadUrl"
+    }
+}
+if (-not $downloaded) {
+    throw 'Could not download the verified OpenCode archive'
+}
 $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 if ($actualHash -ne $expectedHash) {
     throw "OpenCode archive checksum mismatch: expected $expectedHash, got $actualHash"
@@ -73,7 +89,7 @@ Set-Location -LiteralPath `$workspace
 `$env:XDG_CONFIG_HOME = '$($configHome.Replace("'", "''"))'
 `$env:XDG_DATA_HOME = '$($dataHome.Replace("'", "''"))'
 `$env:XDG_CACHE_HOME = '$($cacheHome.Replace("'", "''"))'
-& '$((Join-Path $binRoot 'opencode.exe').Replace("'", "''"))' web --hostname 127.0.0.1 --port 4096
+& '$((Join-Path $binRoot 'opencode.exe').Replace("'", "''"))' web --hostname 127.0.0.1 --port 4097
 "@
 [System.IO.File]::WriteAllText($launcherPath, $launcher, [System.Text.UTF8Encoding]::new($true))
 
