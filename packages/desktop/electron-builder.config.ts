@@ -36,13 +36,14 @@ const channel = (() => {
 })()
 
 const APP_IDS = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "ru.sibsemena.agent.dev",
+  beta: "ru.sibsemena.agent.beta",
+  prod: "ru.sibsemena.agent",
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  electronDist: path.join(packageDir, "node_modules", "electron", "dist"),
+  artifactName: "Semena-Agent-Setup-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -86,8 +87,8 @@ const getBase = (appId: string): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: "OpenCode",
-    schemes: ["opencode"],
+    name: "Семена - Агент",
+    schemes: ["semena-agent"],
   },
   win: {
     icon: `resources/icons/icon.ico`,
@@ -127,7 +128,7 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Dev",
+        productName: "Семена - Агент Dev",
         deb: { fpm: [metainfoFpm(appId)] },
         rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
       }
@@ -136,8 +137,8 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
+        productName: "Семена - Агент Beta",
+        protocols: { name: "Семена - Агент Beta", schemes: ["semena-agent"] },
         publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
         deb: { fpm: [metainfoFpm(appId)] },
         rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
@@ -147,9 +148,8 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        productName: "Семена - Агент",
+        protocols: { name: "Семена - Агент", schemes: ["semena-agent"] },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
         rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
       }

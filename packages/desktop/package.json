@@ -1,13 +1,14 @@
 {
-  "name": "@opencode-ai/desktop",
+  "name": "semena-agent",
+  "description": "Корпоративный ИИ-агент компании «Семена для Сибири»",
   "private": true,
   "version": "1.18.15",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://sibsemena.ru",
   "author": {
-    "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "name": "Семена для Сибири",
+    "email": "support@sibsemena.ru"
   },
   "scripts": {
     "typecheck": "tsgo -b",

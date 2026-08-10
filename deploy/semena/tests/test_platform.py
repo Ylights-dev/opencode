@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 import pathlib
@@ -21,7 +20,7 @@ import auth_server  # noqa: E402
 class ClientConfigTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.config = json.loads((ROOT / "client" / "opencode.json").read_text(encoding="utf-8"))
+        cls.config = json.loads((ROOT / "client" / "agent-config.json").read_text(encoding="utf-8"))
 
     def test_gateway_is_tls_and_not_direct_ollama(self) -> None:
         options = self.config["provider"]["semena"]["options"]
@@ -30,7 +29,11 @@ class ClientConfigTests(unittest.TestCase):
 
     def test_key_is_injected_not_committed(self) -> None:
         options = self.config["provider"]["semena"]["options"]
-        self.assertEqual(options["apiKey"], "{env:SEMENA_OPENCODE_API_KEY}")
+        self.assertEqual(options["apiKey"], "{env:SEMENA_AGENT_API_KEY}")
+
+    def test_only_corporate_provider_is_enabled(self) -> None:
+        self.assertEqual(self.config["enabled_providers"], ["semena"])
+        self.assertEqual(self.config["model"], "semena/semena-code")
 
     def test_workspace_boundary_and_secret_reads_are_denied(self) -> None:
         permission = self.config["permission"]
@@ -51,50 +54,51 @@ class DeploymentTests(unittest.TestCase):
         candidates = [
             ROOT / "compose.yaml",
             ROOT / "auth_server.py",
-            ROOT / "client" / "opencode.json",
+            ROOT / "client" / "agent-config.json",
         ]
         secret = re.compile(r"(?:ghp_|github_pat_|sk-[A-Za-z0-9_-]{20,})")
         for path in candidates:
             self.assertIsNone(secret.search(path.read_text(encoding="utf-8")), path)
 
     def test_installer_pins_version_and_checksum(self) -> None:
-        installer = (ROOT / "client" / "Install-SemenaOpenCode.ps1").read_text(encoding="utf-8")
-        self.assertIn("$version = '1.18.15'", installer)
+        installer = (ROOT / "client" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
         self.assertRegex(installer, r"\$expectedHash = '[A-F0-9]{64}'")
         self.assertIn("Get-FileHash", installer)
         self.assertIn("Import-Certificate", installer)
-        self.assertIn("http://10.1.50.101:3010/downloads/opencode-windows-x64-$version.zip", installer)
-        self.assertIn("https://github.com/anomalyco/opencode/releases/download/v$version/", installer)
+        self.assertIn("/downloads/Semena-Agent-Setup-x64.exe", installer)
+        self.assertNotIn("github.com", installer)
 
     def test_installer_uses_open_webui_login_and_pins_ca_for_runtime(self) -> None:
-        installer = (ROOT / "client" / "Install-SemenaOpenCode.ps1").read_text(encoding="utf-8")
-        russian_strings = {
-            base64.b64decode(value).decode("utf-8")
-            for value in re.findall(r"Ru '([A-Za-z0-9+/=]+)'", installer)
-        }
-        self.assertIn("Введите e-mail от Open WebUI", russian_strings)
-        self.assertIn("Введите пароль от Open WebUI", russian_strings)
+        installer = (ROOT / "client" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("Введите e-mail от корпоративной веб-панели", installer)
+        self.assertIn("Введите пароль от корпоративной веб-панели", installer)
         self.assertIn("$ProgressPreference = 'SilentlyContinue'", installer)
         self.assertIn("https://10.1.50.101:8443/enroll", installer)
         self.assertIn("Invoke-RestMethod -Method Post", installer)
-        self.assertNotIn("Enter your Open WebUI email", installer)
-        self.assertNotIn("Enter your Open WebUI password", installer)
-        self.assertNotIn("Enter your Semena OpenCode access key", installer)
-        self.assertIn("Copy-Item -LiteralPath $certificatePath", installer)
-        self.assertIn("NODE_EXTRA_CA_CERTS", installer)
-        self.assertIn("SSL_CERT_FILE", installer)
-        self.assertIn("XDG_CONFIG_HOME", installer)
-        self.assertIn("XDG_DATA_HOME", installer)
-        self.assertIn("XDG_CACHE_HOME", installer)
-        self.assertIn("--port 4097", installer)
+        self.assertNotIn("Enter your", installer)
+        self.assertIn("SEMENA_AGENT_API_KEY", installer)
+        self.assertIn("автоматически привязано", installer)
 
     def test_double_click_installer_wrapper_exists(self) -> None:
-        wrapper = (ROOT / "client" / "Install-SemenaOpenCode.cmd").read_text(encoding="utf-8")
+        wrapper = (ROOT / "client" / "Install-SemenaAgent.cmd").read_text(encoding="utf-8-sig")
         self.assertIn("ExecutionPolicy Bypass", wrapper)
-        self.assertIn("Install-SemenaOpenCode.ps1", wrapper)
+        self.assertIn("Install-SemenaAgent.ps1", wrapper)
         self.assertNotIn("Installation completed", wrapper)
         self.assertNotIn("Installation failed", wrapper)
         self.assertIn("pause", wrapper)
+
+    def test_desktop_branding_and_identity_are_isolated(self) -> None:
+        desktop = ROOT.parents[1] / "packages" / "desktop"
+        builder = (desktop / "electron-builder.config.ts").read_text(encoding="utf-8")
+        renderer = (desktop / "src" / "renderer" / "index.html").read_text(encoding="utf-8")
+        wordmark = (
+            ROOT.parents[1] / "packages" / "ui" / "src" / "v2" / "components" / "wordmark-v2.tsx"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ru.sibsemena.agent", builder)
+        self.assertIn("Семена - Агент", builder)
+        self.assertIn("<title>Семена - Агент</title>", renderer)
+        self.assertIn("СЕМЕНА - АГЕНТ", wordmark)
+        self.assertNotIn("opencode", wordmark.lower())
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")

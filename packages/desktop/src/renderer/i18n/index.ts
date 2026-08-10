@@ -111,11 +111,14 @@ function pickLocale(value: unknown): Locale | null {
   return parseLocale(record.locale)
 }
 
-const base = i18n.flatten(desktopEn)
+const brandDictionary = <T extends Record<string, string>>(dict: T) =>
+  Object.fromEntries(Object.entries(dict).map(([key, value]) => [key, value.replaceAll("OpenCode", "Семена - Агент")])) as T
 
-function build(locale: Locale): Dictionary {
+const base = brandDictionary(i18n.flatten(desktopEn))
+
+function buildRaw(locale: Locale): Dictionary {
   if (locale === "en") return base
-  if (locale === "zh") return { ...base, ...i18n.flatten(desktopZh) }
+  if (locale === "zh") return brandDictionary({ ...base, ...i18n.flatten(desktopZh) })
   if (locale === "zht") return { ...base, ...i18n.flatten(desktopZht) }
   if (locale === "de") return { ...base, ...i18n.flatten(desktopDe) }
   if (locale === "es") return { ...base, ...i18n.flatten(desktopEs) }
@@ -176,6 +179,10 @@ function build(locale: Locale): Dictionary {
   if (locale === "tk") return { ...base, ...i18n.flatten(desktopTk) }
   if (locale === "uz") return { ...base, ...i18n.flatten(desktopUz) }
   return { ...base, ...i18n.flatten(desktopKo) }
+}
+
+function build(locale: Locale): Dictionary {
+  return brandDictionary(buildRaw(locale))
 }
 
 const state = {

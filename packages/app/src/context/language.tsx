@@ -43,11 +43,16 @@ const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
-const base = i18n.flatten({ ...en, ...uiEn })
+const brandDictionary = <T extends Record<string, string>>(dict: T) =>
+  Object.fromEntries(Object.entries(dict).map(([key, value]) => [key, value.replaceAll("OpenCode", "Семена - Агент")])) as T
+
+const base = brandDictionary(i18n.flatten({ ...en, ...uiEn }))
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
 const merge = (app: Promise<Source>, ui: Promise<Source>) =>
-  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
+  Promise.all([app, ui]).then(
+    ([a, b]) => brandDictionary({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary,
+  )
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   zh: () => merge(import("@/i18n/zh"), import("@opencode-ai/ui/i18n/zh")),
