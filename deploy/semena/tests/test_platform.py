@@ -37,12 +37,10 @@ class ClientConfigTests(unittest.TestCase):
 
     def test_agent_can_run_scripts_and_use_tools(self) -> None:
         permission = self.config["permission"]
-        self.assertEqual(permission["external_directory"], "ask")
+        self.assertEqual(permission["external_directory"], "allow")
         self.assertEqual(permission["bash"], "allow")
-        for tool in ["edit", "glob", "grep", "list", "task", "todowrite", "lsp", "skill", "webfetch", "websearch"]:
+        for tool in ["edit", "glob", "grep", "list", "task", "todowrite", "lsp", "skill", "webfetch", "websearch", "read", "write"]:
             self.assertEqual(permission[tool], "allow", tool)
-        self.assertEqual(permission["read"]["*.env"], "deny")
-        self.assertEqual(permission["read"]["*.key"], "deny")
 
 
 class DeploymentTests(unittest.TestCase):

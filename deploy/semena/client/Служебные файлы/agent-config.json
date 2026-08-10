@@ -23,7 +23,7 @@
     }
   },
   "permission": {
-    "external_directory": "ask",
+    "external_directory": "allow",
     "bash": "allow",
     "webfetch": "allow",
     "websearch": "allow",
@@ -35,13 +35,8 @@
     "todowrite": "allow",
     "lsp": "allow",
     "skill": "allow",
-    "read": {
-      "*": "allow",
-      "*.env": "deny",
-      "*.env.*": "deny",
-      "*.key": "deny",
-      "*.pem": "deny"
-    }
+    "read": "allow",
+    "write": "allow"
   },
   "instructions": ["AGENTS.md"]
 }
