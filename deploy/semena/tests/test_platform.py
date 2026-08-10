@@ -99,6 +99,17 @@ class DeploymentTests(unittest.TestCase):
         for name in ["Install-SemenaAgent.ps1", "agent-config.json", "AGENTS.md", "semena-agent-ca.crt"]:
             self.assertTrue((support / name).is_file(), name)
 
+    def test_onefile_installer_bundle_exists(self) -> None:
+        root = ROOT / "client" / "onefile"
+        builder = (root / "Build-SemenaAgentSetup.ps1").read_text(encoding="utf-8")
+        embedded = (root / "Install-SemenaAgentEmbedded.ps1").read_text(encoding="utf-8")
+        self.assertIn("7z.sfx", builder)
+        self.assertIn("SemenaAgentSetup.exe", builder)
+        self.assertIn("Semena-Agent-Setup-x64.exe", builder)
+        self.assertIn("Semena-Agent-Setup-x64.exe", embedded)
+        self.assertNotIn("Invoke-WebRequest", embedded)
+        self.assertIn("Invoke-RestMethod -Method Post", embedded)
+
     def test_desktop_branding_and_identity_are_isolated(self) -> None:
         desktop = ROOT.parents[1] / "packages" / "desktop"
         builder = (desktop / "electron-builder.config.ts").read_text(encoding="utf-8")
