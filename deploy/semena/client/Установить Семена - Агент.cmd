@@ -1,12 +1,25 @@
 @echo off
-chcp 65001 >nul
-title Установка Семена - Агент
-echo Установка приложения "Семена - Агент"
-echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Служебные файлы\Install-SemenaAgent.ps1"
+setlocal
+title Semena Agent Setup
+
+set "SCRIPT="
+for /d %%D in ("%~dp0*") do (
+  if exist "%%~fD\Install-SemenaAgent.ps1" set "SCRIPT=%%~fD\Install-SemenaAgent.ps1"
+)
+
+if not defined SCRIPT (
+  echo Installer files were not found.
+  echo Please extract the ZIP archive completely and run this file again.
+  echo.
+  pause
+  exit /b 1
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%"
 if errorlevel 1 (
   echo.
-  echo Установка не завершилась. Сообщите текст ошибки администратору.
+  echo Installation did not finish successfully.
+  echo Send the error text from this window to the administrator.
 )
 echo.
 pause

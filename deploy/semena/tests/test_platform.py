@@ -84,11 +84,11 @@ class DeploymentTests(unittest.TestCase):
     def test_double_click_installer_wrapper_exists(self) -> None:
         wrapper = (ROOT / "client" / "Установить Семена - Агент.cmd").read_text(encoding="utf-8-sig")
         self.assertIn("ExecutionPolicy Bypass", wrapper)
-        self.assertIn("Служебные файлы\\Install-SemenaAgent.ps1", wrapper)
+        self.assertIn("Install-SemenaAgent.ps1", wrapper)
+        self.assertIn("Please extract the ZIP archive completely", wrapper)
         self.assertNotIn("Installation completed", wrapper)
         self.assertNotIn("Installation failed", wrapper)
         self.assertIn("pause", wrapper)
-        self.assertIn("Установка", wrapper)
 
     def test_client_bundle_has_single_human_entrypoint(self) -> None:
         root = ROOT / "client"
