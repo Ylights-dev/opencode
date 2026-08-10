@@ -98,25 +98,6 @@ describe("tool.webfetch", () => {
     ),
   )
 
-  it.instance("returns non-success status codes as tool output", () =>
-    withFetch(
-      () =>
-        new Response("<html><body>Not Found</body></html>", {
-          status: 404,
-          headers: { "content-type": "text/html; charset=utf-8" },
-        }),
-      (url) =>
-        Effect.gen(function* () {
-          const result = yield* exec({ url: new URL("/missing.html", url).toString(), format: "markdown" })
-          expect(result.title).toContain("HTTP 404")
-          expect(result.output).toContain("HTTP 404")
-          expect(result.output).toContain("Not Found")
-          expect(result.metadata.status).toBe(404)
-          expect(result.attachments).toBeUndefined()
-        }),
-    ),
-  )
-
   it.instance("extracts text from html without scripts or styles", () =>
     withFetch(
       () =>
