@@ -506,7 +506,7 @@ const layer = Layer.effect(
                 message: userMessage,
                 overflow: input.overflow === true,
               },
-              { enabled: true },
+              { enabled: false },
             )).enabled
           ) {
             const continueMsg = yield* session.updateMessage({

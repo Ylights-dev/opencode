@@ -33,6 +33,20 @@ export type TimelineRowMap = {
 }
 
 export namespace Timeline {
+  function isInternalCompactionUser(user: UserMessage, getMessageParts: (messageID: string) => Part[]) {
+    const parts = getMessageParts(user.id)
+    if (parts.some((part) => part.type === "compaction")) return true
+    const textParts = parts.filter((part) => part.type === "text")
+    return (
+      textParts.length > 0 &&
+      textParts.every(
+        (part) =>
+          part.synthetic === true &&
+          (part.metadata as { compaction_continue?: boolean } | undefined)?.compaction_continue === true,
+      )
+    )
+  }
+
   export function constructSessionMessageRows(
     messages: SessionMessageInfo[],
     getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
@@ -44,9 +58,14 @@ export namespace Timeline {
   ) {
     const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
+    const hiddenUserIDs = new Set<string>()
     messages.forEach((message) => {
       const projected = getMessage(message.id)
       if (message.type === "shell" && projected?.role === "user") {
+        if (isInternalCompactionUser(projected, getMessageParts)) {
+          hiddenUserIDs.add(projected.id)
+          return
+        }
         const assistant = getMessage(`${message.id}:assistant`)
         const turn = { user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }
         turns.push(turn)
@@ -54,6 +73,10 @@ export namespace Timeline {
         return
       }
       if (projected?.role === "user") {
+        if (isInternalCompactionUser(projected, getMessageParts)) {
+          hiddenUserIDs.add(projected.id)
+          return
+        }
         if (turnByUserID.has(projected.id)) return
         const turn = { user: projected, assistants: [] }
         turns.push(turn)
@@ -61,6 +84,7 @@ export namespace Timeline {
         return
       }
       if (projected?.role !== "assistant") return
+      if (hiddenUserIDs.has(projected.parentID)) return
       const existing = turnByUserID.get(projected.parentID)
       if (existing) {
         existing.assistants.push(projected)
@@ -73,6 +97,7 @@ export namespace Timeline {
       turnByUserID.set(user.id, turn)
     })
     projectedUserMessages.forEach((user) => {
+      if (isInternalCompactionUser(user, getMessageParts)) return
       if (turnByUserID.has(user.id)) return
       const turn = { user, assistants: [] }
       const index = turns.findIndex((item) => compareMessages(user, item.user) < 0)
