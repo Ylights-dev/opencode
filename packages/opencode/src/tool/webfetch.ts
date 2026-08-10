@@ -25,7 +25,6 @@ export const WebFetchTool = Tool.define(
   "webfetch",
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const httpOk = HttpClient.filterStatusOk(http)
 
     return {
       description: DESCRIPTION,
@@ -75,35 +74,38 @@ export const WebFetchTool = Tool.define(
 
           const request = HttpClientRequest.get(params.url).pipe(HttpClientRequest.setHeaders(headers))
 
-          // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
-          const response = yield* httpOk.execute(request).pipe(
-            Effect.catchIf(
-              (err) =>
-                err.reason._tag === "StatusCodeError" &&
-                err.reason.response.status === 403 &&
-                err.reason.response.headers["cf-mitigated"] === "challenge",
-              () =>
-                httpOk.execute(
-                  HttpClientRequest.get(params.url).pipe(
-                    HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" }),
-                  ),
-                ),
-            ),
+          const response = yield* http.execute(request).pipe(
             Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error("Request timed out")) }),
           )
 
+          const finalResponse =
+            response.status === 403 && response.headers["cf-mitigated"] === "challenge"
+              ? yield* http
+                  .execute(
+                    HttpClientRequest.get(params.url).pipe(
+                      HttpClientRequest.setHeaders({ ...headers, "User-Agent": "opencode" }),
+                    ),
+                  )
+                  .pipe(
+                    Effect.timeoutOrElse({
+                      duration: timeout,
+                      orElse: () => Effect.die(new Error("Request timed out")),
+                    }),
+                  )
+              : response
+
           // Check content length
-          const contentLength = response.headers["content-length"]
+          const contentLength = finalResponse.headers["content-length"]
           if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
             throw new Error("Response too large (exceeds 5MB limit)")
           }
 
-          const arrayBuffer = yield* response.arrayBuffer
+          const arrayBuffer = yield* finalResponse.arrayBuffer
           if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
             throw new Error("Response too large (exceeds 5MB limit)")
           }
 
-          const contentType = response.headers["content-type"] || ""
+          const contentType = finalResponse.headers["content-type"] || ""
           const mime = contentType.split(";")[0]?.trim().toLowerCase() || ""
           const title = `${params.url} (${contentType})`
 
@@ -124,6 +126,13 @@ export const WebFetchTool = Tool.define(
           }
 
           const content = new TextDecoder().decode(arrayBuffer)
+          if (finalResponse.status < 200 || finalResponse.status >= 300) {
+            return {
+              title: `${params.url} (HTTP ${finalResponse.status})`,
+              output: formatHttpError(finalResponse.status, contentType, content),
+              metadata: { status: finalResponse.status },
+            }
+          }
 
           // Handle content based on requested format and actual content type
           switch (params.format) {
@@ -189,4 +198,12 @@ function convertHTMLToMarkdown(html: string): string {
   })
   turndownService.remove(["script", "style", "meta", "link"])
   return turndownService.turndown(html)
+}
+
+function formatHttpError(status: number, contentType: string, content: string) {
+  const body = contentType.includes("text/html") ? extractTextFromHTML(content) : content
+  const trimmed = body.replace(/\s+/g, " ").trim()
+  const preview = trimmed.length > 2000 ? `${trimmed.slice(0, 2000)}...` : trimmed
+  const details = preview ? `\n\nResponse body preview:\n${preview}` : ""
+  return `The web request completed with HTTP ${status}. The page was not fetched successfully. Try another URL or use web search to find an available source.${details}`
 }

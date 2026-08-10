@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $setupUrl = 'http://10.1.50.101:3010/downloads/Semena-Agent-Setup-x64.exe'
-$expectedHash = '74842BE263195A62E83F102CE781A8D9BC2564B2C8B14226315D845BCF0DE9E4'
+$expectedHash = '86FDC73BC3BF781332D808099D20243F0BE8731F8A1438BB923FD79D2E4D6F23'
 $enrollUrl = 'https://10.1.50.101:8443/enroll'
 $runtimeRoot = Join-Path $env:LOCALAPPDATA 'Семена - Агент'
 $configRoot = Join-Path $runtimeRoot 'config\opencode'

@@ -10,7 +10,7 @@ $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $host.UI.RawUI.WindowTitle = 'Установка Семена - Агент'
 
-$expectedHash = '74842BE263195A62E83F102CE781A8D9BC2564B2C8B14226315D845BCF0DE9E4'
+$expectedHash = '__SEMENA_DESKTOP_SETUP_SHA256__'
 $enrollUrl = 'https://10.1.50.101:8443/enroll'
 $runtimeRoot = Join-Path $env:LOCALAPPDATA 'Семена - Агент'
 $configRoot = Join-Path $runtimeRoot 'config\opencode'

@@ -27,7 +27,9 @@ if (-not (Test-Path -LiteralPath $desktopSetup)) {
 
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 try {
+    $desktopHash = (Get-FileHash -LiteralPath $desktopSetup -Algorithm SHA256).Hash
     $embeddedScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Install-SemenaAgentEmbedded.ps1') -Raw -Encoding UTF8
+    $embeddedScript = $embeddedScript.Replace('__SEMENA_DESKTOP_SETUP_SHA256__', $desktopHash)
     [IO.File]::WriteAllText(
         (Join-Path $staging 'Install-SemenaAgentEmbedded.ps1'),
         $embeddedScript,

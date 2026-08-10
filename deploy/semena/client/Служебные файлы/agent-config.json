@@ -6,7 +6,7 @@
   "provider": {
     "semena": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Семена для Сибири — локальная модель",
+      "name": "Семена для Сибири - локальная модель",
       "options": {
         "baseURL": "https://10.1.50.101:8443/v1",
         "apiKey": "{env:SEMENA_AGENT_API_KEY}"
