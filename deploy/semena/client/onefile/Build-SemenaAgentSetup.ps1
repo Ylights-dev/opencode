@@ -19,8 +19,7 @@ if (-not $supportRoot) {
 }
 $desktopSetup = Join-Path $repoRoot 'packages\desktop\dist\Semena-Agent-Setup-x64.exe'
 $staging = Join-Path $env:TEMP ('semena-agent-onefile-' + [Guid]::NewGuid().ToString('N'))
-$archivePath = Join-Path $staging 'SemenaAgentSetup.7z'
-$configPath = Join-Path $staging 'sfx-config.txt'
+$sedPath = Join-Path $staging 'SemenaAgentSetup.sed'
 
 if (-not (Test-Path -LiteralPath $desktopSetup)) {
     throw "Application installer was not found: $desktopSetup"
@@ -42,53 +41,51 @@ try {
     $outputDir = Split-Path -Parent $OutputPath
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
-    $sevenZip = 'C:\Program Files\7-Zip\7z.exe'
-    $sfxModule = 'C:\Program Files\7-Zip\7z.sfx'
-    if (-not (Test-Path -LiteralPath $sevenZip)) {
-        throw "7-Zip was not found: $sevenZip"
-    }
-    if (-not (Test-Path -LiteralPath $sfxModule)) {
-        throw "7-Zip SFX module was not found: $sfxModule"
-    }
-
-    $sfxConfig = @"
-;!@Install@!UTF-8!
-Title="Семена - Агент"
-BeginPrompt="Установить приложение Семена - Агент?"
-RunProgram="powershell.exe -NoProfile -ExecutionPolicy Bypass -File Install-SemenaAgentEmbedded.ps1"
-;!@InstallEnd@!
+    $sed = @"
+[Version]
+Class=IEXPRESS
+SEDVersion=3
+[Options]
+PackagePurpose=InstallApp
+ShowInstallProgramWindow=1
+HideExtractAnimation=1
+UseLongFileName=1
+InsideCompressed=1
+CAB_FixedSize=0
+CAB_ResvCodeSigning=0
+RebootMode=N
+InstallPrompt=
+DisplayLicense=
+FinishMessage=
+TargetName=$OutputPath
+FriendlyName=Semena Agent Setup
+AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File Install-SemenaAgentEmbedded.ps1
+PostInstallCmd=<None>
+AdminQuietInstCmd=
+UserQuietInstCmd=
+SourceFiles=SourceFiles
+[Strings]
+FILE0=Install-SemenaAgentEmbedded.ps1
+FILE1=agent-config.json
+FILE2=AGENTS.md
+FILE3=semena-agent-ca.crt
+FILE4=Semena-Agent-Setup-x64.exe
+[SourceFiles]
+SourceFiles0=$staging\
+[SourceFiles0]
+%FILE0%=
+%FILE1%=
+%FILE2%=
+%FILE3%=
+%FILE4%=
 "@
-    [IO.File]::WriteAllText($configPath, $sfxConfig, [Text.UTF8Encoding]::new($false))
-
-    Push-Location $staging
-    try {
-        & $sevenZip a -t7z -mx=7 $archivePath `
-            'Install-SemenaAgentEmbedded.ps1' `
-            'agent-config.json' `
-            'AGENTS.md' `
-            'semena-agent-ca.crt' `
-            'Semena-Agent-Setup-x64.exe' | Out-Host
-        if ($LASTEXITCODE -ne 0) {
-            throw "7-Zip archive creation failed with exit code $LASTEXITCODE"
-        }
+    [IO.File]::WriteAllText($sedPath, $sed, [Text.ASCIIEncoding]::new())
+    $iexpress = Start-Process -FilePath 'iexpress.exe' -ArgumentList @('/N', $sedPath) -Wait -PassThru
+    if ($iexpress.ExitCode -ne 0) {
+        throw "IExpress failed with exit code $($iexpress.ExitCode)"
     }
-    finally {
-        Pop-Location
-    }
-
-    $outputStream = [IO.File]::Create($OutputPath)
-    try {
-        foreach ($part in @($sfxModule, $configPath, $archivePath)) {
-            $partBytes = [IO.File]::ReadAllBytes($part)
-            $outputStream.Write($partBytes, 0, $partBytes.Length)
-        }
-    }
-    finally {
-        $outputStream.Dispose()
-    }
-
     if (-not (Test-Path -LiteralPath $OutputPath)) {
-        throw "SFX did not create output file: $OutputPath"
+        throw "IExpress did not create output file: $OutputPath"
     }
     Get-FileHash -Algorithm SHA256 -LiteralPath $OutputPath
 }
