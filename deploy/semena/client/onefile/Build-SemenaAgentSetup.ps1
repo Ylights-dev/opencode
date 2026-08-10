@@ -19,7 +19,7 @@ if (-not $supportRoot) {
 }
 $desktopSetup = Join-Path $repoRoot 'packages\desktop\dist\Semena-Agent-Setup-x64.exe'
 $staging = Join-Path $env:TEMP ('semena-agent-onefile-' + [Guid]::NewGuid().ToString('N'))
-$sedPath = Join-Path $staging 'SemenaAgentSetup.sed'
+$nsiPath = Join-Path $staging 'SemenaAgentSetup.nsi'
 
 if (-not (Test-Path -LiteralPath $desktopSetup)) {
     throw "Application installer was not found: $desktopSetup"
@@ -41,51 +41,56 @@ try {
     $outputDir = Split-Path -Parent $OutputPath
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
-    $sed = @"
-[Version]
-Class=IEXPRESS
-SEDVersion=3
-[Options]
-PackagePurpose=InstallApp
-ShowInstallProgramWindow=1
-HideExtractAnimation=1
-UseLongFileName=1
-InsideCompressed=1
-CAB_FixedSize=0
-CAB_ResvCodeSigning=0
-RebootMode=N
-InstallPrompt=
-DisplayLicense=
-FinishMessage=
-TargetName=$OutputPath
-FriendlyName=Semena Agent Setup
-AppLaunched=powershell.exe -NoProfile -ExecutionPolicy Bypass -File Install-SemenaAgentEmbedded.ps1
-PostInstallCmd=<None>
-AdminQuietInstCmd=
-UserQuietInstCmd=
-SourceFiles=SourceFiles
-[Strings]
-FILE0=Install-SemenaAgentEmbedded.ps1
-FILE1=agent-config.json
-FILE2=AGENTS.md
-FILE3=semena-agent-ca.crt
-FILE4=Semena-Agent-Setup-x64.exe
-[SourceFiles]
-SourceFiles0=$staging\
-[SourceFiles0]
-%FILE0%=
-%FILE1%=
-%FILE2%=
-%FILE3%=
-%FILE4%=
-"@
-    [IO.File]::WriteAllText($sedPath, $sed, [Text.ASCIIEncoding]::new())
-    $iexpress = Start-Process -FilePath 'iexpress.exe' -ArgumentList @('/N', $sedPath) -Wait -PassThru
-    if ($iexpress.ExitCode -ne 0) {
-        throw "IExpress failed with exit code $($iexpress.ExitCode)"
+    $makensis = Join-Path $env:LOCALAPPDATA 'electron-builder\Cache\nsis-3.0.4.1\nsis-3.0.4.1-1mx3n\Bin\makensis.exe'
+    if (-not (Test-Path -LiteralPath $makensis)) {
+        throw "makensis.exe was not found: $makensis"
     }
+
+    $iconPath = Resolve-Path (Join-Path $PSScriptRoot '..\branding\Semena-Agent.ico')
+    $nsi = @"
+Unicode true
+Name "Semena Agent Setup"
+OutFile "$OutputPath"
+Icon "$iconPath"
+RequestExecutionLevel user
+SilentInstall normal
+ShowInstDetails show
+AutoCloseWindow true
+
+Section "Install"
+  InitPluginsDir
+  SetOutPath "`$PLUGINSDIR"
+  File /oname=Install-SemenaAgentEmbedded.ps1 "$staging\Install-SemenaAgentEmbedded.ps1"
+  File /oname=agent-config.json "$staging\agent-config.json"
+  File /oname=AGENTS.md "$staging\AGENTS.md"
+  File /oname=semena-agent-ca.crt "$staging\semena-agent-ca.crt"
+  File /oname=Semena-Agent-Setup-x64.exe "$staging\Semena-Agent-Setup-x64.exe"
+
+  ReadEnvStr `$0 "SEMENA_AGENT_SETUP_API_KEY"
+  StrCmp `$0 "" 0 with_key
+  ExecWait '"`$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "`$PLUGINSDIR\Install-SemenaAgentEmbedded.ps1"' `$1
+  Goto done
+
+  with_key:
+  ExecWait '"`$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "`$PLUGINSDIR\Install-SemenaAgentEmbedded.ps1" -ApiKey "`$0"' `$1
+
+  done:
+  IntCmp `$1 0 ok fail fail
+  fail:
+    DetailPrint "Installer failed with exit code `$1"
+    SetErrorLevel `$1
+    Abort "Semena Agent setup failed. See the PowerShell window for details."
+  ok:
+SectionEnd
+"@
+    [IO.File]::WriteAllText($nsiPath, $nsi, [Text.UTF8Encoding]::new($true))
+    & $makensis /V2 $nsiPath | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "NSIS failed with exit code $LASTEXITCODE"
+    }
+
     if (-not (Test-Path -LiteralPath $OutputPath)) {
-        throw "IExpress did not create output file: $OutputPath"
+        throw "NSIS did not create output file: $OutputPath"
     }
     Get-FileHash -Algorithm SHA256 -LiteralPath $OutputPath
 }

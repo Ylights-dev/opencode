@@ -103,10 +103,11 @@ class DeploymentTests(unittest.TestCase):
         root = ROOT / "client" / "onefile"
         builder = (root / "Build-SemenaAgentSetup.ps1").read_text(encoding="utf-8")
         embedded = (root / "Install-SemenaAgentEmbedded.ps1").read_text(encoding="utf-8")
-        self.assertIn("iexpress.exe", builder)
+        self.assertIn("makensis.exe", builder)
         self.assertIn("SemenaAgentSetup.exe", builder)
         self.assertIn("Semena-Agent-Setup-x64.exe", builder)
         self.assertNotIn("7z.sfx", builder)
+        self.assertNotIn("iexpress.exe", builder)
         self.assertIn("Semena-Agent-Setup-x64.exe", embedded)
         self.assertNotIn("Invoke-WebRequest", embedded)
         self.assertIn("Invoke-RestMethod -Method Post", embedded)
