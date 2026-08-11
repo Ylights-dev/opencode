@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import py_compile
 import re
 import sys
 import tempfile
@@ -110,14 +109,12 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("python-3.13.13-amd64.exe", builder)
         self.assertIn("python-wheels", builder)
         self.assertIn("xlrd-2.0.1-py2.py3-none-any.whl", builder)
-        self.assertIn("semena_registry_check.py", builder)
         self.assertNotIn("7z.sfx", builder)
         self.assertNotIn("iexpress.exe", builder)
         self.assertIn("Semena-Agent-Setup-x64.exe", embedded)
         self.assertIn("Install-AgentPython", embedded)
         self.assertIn("openpyxl", embedded)
         self.assertIn("xlrd", embedded)
-        self.assertIn("semena_registry_check.py", embedded)
         self.assertNotIn("Invoke-WebRequest", embedded)
         self.assertIn("Invoke-RestMethod -Method Post", embedded)
 
@@ -150,14 +147,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("@' ... '@ | py -3 -", instructions)
         self.assertIn("Госсорткомиссии `gossortrf.ru`", instructions)
         self.assertIn("arrFilter_pf[CULTURE_NAME]", instructions)
-        self.assertIn("semena_registry_check.py", instructions)
         self.assertIn("Никогда не выводи служебные маркеры", instructions)
-
-    def test_registry_helper_is_bundled_and_compiles(self) -> None:
-        helper = ROOT / "client" / "Служебные файлы" / "semena_registry_check.py"
-        self.assertTrue(helper.is_file())
-        self.assertIn("REGISTRY_URL", helper.read_text(encoding="utf-8"))
-        py_compile.compile(str(helper), doraise=True)
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")

@@ -171,7 +171,6 @@ $env:SEMENA_AGENT_API_KEY = $ApiKey
 
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'agent-config.json') -Destination (Join-Path $configRoot 'opencode.json') -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'AGENTS.md') -Destination (Join-Path $Workspace 'AGENTS.md') -Force
-Copy-Item -LiteralPath (Join-Path $sourceRoot 'semena_registry_check.py') -Destination (Join-Path $Workspace 'semena_registry_check.py') -Force
 Copy-Item -LiteralPath $certificateSource -Destination $certificateTarget -Force
 Install-AgentPython
 

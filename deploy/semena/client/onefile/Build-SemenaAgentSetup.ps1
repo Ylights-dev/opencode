@@ -47,7 +47,6 @@ try {
     )
     Copy-Item -LiteralPath (Join-Path $supportRoot 'agent-config.json') -Destination (Join-Path $staging 'agent-config.json') -Force
     Copy-Item -LiteralPath (Join-Path $supportRoot 'AGENTS.md') -Destination (Join-Path $staging 'AGENTS.md') -Force
-    Copy-Item -LiteralPath (Join-Path $supportRoot 'semena_registry_check.py') -Destination (Join-Path $staging 'semena_registry_check.py') -Force
     Copy-Item -LiteralPath (Join-Path $supportRoot 'semena-agent-ca.crt') -Destination (Join-Path $staging 'semena-agent-ca.crt') -Force
     Copy-Item -LiteralPath $desktopSetup -Destination (Join-Path $staging 'Semena-Agent-Setup-x64.exe') -Force
     Copy-Item -LiteralPath $pythonInstaller -Destination (Join-Path $staging 'python-3.13.13-amd64.exe') -Force
@@ -79,7 +78,6 @@ Section "Install"
   File /oname=Install-SemenaAgentEmbedded.ps1 "$staging\Install-SemenaAgentEmbedded.ps1"
   File /oname=agent-config.json "$staging\agent-config.json"
   File /oname=AGENTS.md "$staging\AGENTS.md"
-  File /oname=semena_registry_check.py "$staging\semena_registry_check.py"
   File /oname=semena-agent-ca.crt "$staging\semena-agent-ca.crt"
   File /oname=Semena-Agent-Setup-x64.exe "$staging\Semena-Agent-Setup-x64.exe"
   File /oname=python-3.13.13-amd64.exe "$staging\python-3.13.13-amd64.exe"
