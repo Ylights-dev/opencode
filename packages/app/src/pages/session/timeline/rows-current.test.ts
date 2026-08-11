@@ -168,6 +168,100 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test("keeps real compacted turns visible without exposing synthetic continue turns", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "process the workbook", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "working" }],
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_compaction",
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: "summary",
+        recent: "recent",
+        time: { created: 4 },
+      },
+      {
+        id: "msg_synthetic",
+        type: "synthetic",
+        text: "Continue if you have next steps",
+        description: "Continue if you have next steps",
+        metadata: { compaction_continue: true },
+        time: { created: 5 },
+      },
+      {
+        id: "msg_after_synthetic",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "internal summary" }],
+        time: { created: 6, completed: 7 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) => messages.get(messageID),
+      (messageID) => normalized.parts.get(messageID) ?? [],
+      true,
+      "idle",
+      true,
+      normalized.messages.filter((message) => message.role === "user"),
+    )
+
+    expect(result.activeMessageID).toBe("msg_user")
+    expect(result.rows.map(TimelineRow.key)).toEqual([
+      "user-message:msg_user",
+      "turn-divider:msg_user:compaction",
+      "assistant-part:msg_user:msg_assistant:text:0",
+    ])
+  })
+
+  test("hides synthetic compaction continue turns and their assistant replies", () => {
+    const source = [
+      {
+        id: "msg_synthetic",
+        type: "synthetic",
+        text: "Continue if you have next steps",
+        description: "Continue if you have next steps",
+        metadata: { compaction_continue: true },
+        time: { created: 1 },
+      },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "internal summary" }],
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) => messages.get(messageID),
+      (messageID) => normalized.parts.get(messageID) ?? [],
+      true,
+      "idle",
+      true,
+      normalized.messages.filter((message) => message.role === "user"),
+    )
+
+    expect(result.activeMessageID).toBeUndefined()
+    expect(result.rows).toEqual([])
+  })
+
   test("removes a failed assistant error when the turn continues streaming", () => {
     const source = [
       { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },

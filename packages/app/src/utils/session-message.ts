@@ -77,7 +77,7 @@ export function normalizeSessionMessages(sessionID: string, source: readonly Ses
         agent,
         model: { providerID: model.providerID, modelID: model.id, variant: model.variant },
       })
-      parts.set(message.id, [textPart(sessionID, message.id, 0, message.description, true)])
+      parts.set(message.id, [textPart(sessionID, message.id, 0, message.description, true, message.metadata)])
       return
     }
     if (message.type === "shell") {
@@ -289,7 +289,14 @@ function assistantParts(sessionID: string, message: SessionMessageAssistant): Pa
   })
 }
 
-function textPart(sessionID: string, messageID: string, ordinal: number, text: string, synthetic?: boolean): Part {
+function textPart(
+  sessionID: string,
+  messageID: string,
+  ordinal: number,
+  text: string,
+  synthetic?: boolean,
+  metadata?: Record<string, unknown>,
+): Part {
   return {
     id: sessionMessagePartID(messageID, "text", ordinal),
     sessionID,
@@ -297,6 +304,7 @@ function textPart(sessionID: string, messageID: string, ordinal: number, text: s
     type: "text",
     text,
     synthetic,
+    metadata,
   }
 }
 

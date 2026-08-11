@@ -44,9 +44,18 @@ export namespace Timeline {
   ) {
     const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
+    const hiddenUserIDs = new Set<string>()
+
+    const hideInternalCompactionTurn = (user: UserMessage) => {
+      if (!isInternalCompactionUser(user, getMessageParts)) return false
+      hiddenUserIDs.add(user.id)
+      return true
+    }
+
     messages.forEach((message) => {
       const projected = getMessage(message.id)
       if (message.type === "shell" && projected?.role === "user") {
+        if (hideInternalCompactionTurn(projected)) return
         const assistant = getMessage(`${message.id}:assistant`)
         const turn = { user: projected, assistants: assistant?.role === "assistant" ? [assistant] : [] }
         turns.push(turn)
@@ -55,12 +64,14 @@ export namespace Timeline {
       }
       if (projected?.role === "user") {
         if (turnByUserID.has(projected.id)) return
+        if (hideInternalCompactionTurn(projected)) return
         const turn = { user: projected, assistants: [] }
         turns.push(turn)
         turnByUserID.set(projected.id, turn)
         return
       }
       if (projected?.role !== "assistant") return
+      if (hiddenUserIDs.has(projected.parentID)) return
       const existing = turnByUserID.get(projected.parentID)
       if (existing) {
         existing.assistants.push(projected)
@@ -68,12 +79,14 @@ export namespace Timeline {
       }
       const user = getMessage(projected.parentID)
       if (user?.role !== "user") return
+      if (hideInternalCompactionTurn(user)) return
       const turn = { user, assistants: [projected] }
       turns.push(turn)
       turnByUserID.set(user.id, turn)
     })
     projectedUserMessages.forEach((user) => {
       if (turnByUserID.has(user.id)) return
+      if (hideInternalCompactionTurn(user)) return
       const turn = { user, assistants: [] }
       const index = turns.findIndex((item) => compareMessages(user, item.user) < 0)
       if (index < 0) turns.push(turn)
@@ -229,6 +242,24 @@ export namespace Timeline {
     }
 
     return rows
+  }
+
+  function isInternalCompactionUser(user: UserMessage, getMessageParts: (messageID: string) => Part[]) {
+    const parts = getMessageParts(user.id)
+    const hasVisibleUserText = parts.some(
+      (part) => part.type === "text" && part.synthetic !== true && part.ignored !== true && part.text.trim(),
+    )
+    if (!hasVisibleUserText && parts.some((part) => part.type === "compaction")) return true
+
+    const textParts = parts.filter((part) => part.type === "text")
+    return (
+      textParts.length > 0 &&
+      textParts.every(
+        (part) =>
+          part.synthetic === true &&
+          (part.metadata as { compaction_continue?: boolean } | undefined)?.compaction_continue === true,
+      )
+    )
   }
 
   function reasoningHeading(text: string) {
