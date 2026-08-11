@@ -109,8 +109,15 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { args },
             )
             const result = yield* item.execute(args, ctx)
+            const truncated = yield* truncate.output(result.output, {}, input.agent)
             const output = {
               ...result,
+              output: truncated.content,
+              metadata: {
+                ...result.metadata,
+                truncated: truncated.truncated,
+                ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              },
               attachments: result.attachments?.map((attachment) => ({
                 ...attachment,
                 id: PartID.ascending(),
