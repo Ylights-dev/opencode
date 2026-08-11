@@ -81,6 +81,55 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+const SEMENA_AUTOCONTINUE_MARKER = "[semena-auto-continue]"
+const SEMENA_AUTOCONTINUE_MAX = Number.parseInt(process.env.SEMENA_AUTOCONTINUE_MAX ?? "24", 10)
+
+function textFromParts(parts: SessionV1.Part[] | undefined) {
+  return parts
+    ?.filter((part): part is SessionV1.TextPart => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+}
+
+function semenaAutocontinueCount(messages: SessionV1.WithParts[]) {
+  return messages.reduce(
+    (count, msg) =>
+      count +
+      msg.parts.filter((part) => part.type === "text" && part.synthetic && part.text.includes(SEMENA_AUTOCONTINUE_MARKER))
+        .length,
+    0,
+  )
+}
+
+function looksLikeUnfinishedSemenaStop(text: string | undefined) {
+  if (!text) return true
+  const hasDoneSignal =
+    /(^|\s)(готово|сделал|сделана|создан|создала|сохран[её]н|записан|обработано|результат|итог|файл создан|saved|processed|completed)(\s|:|\.|,|$)/i.test(
+      text,
+    )
+  if (hasDoneSignal) return false
+
+  const normalized = text.toLowerCase()
+  return [
+    "i will",
+    "let's",
+    "wait,",
+    "thought",
+    "thinking process",
+    "<channel",
+    "сначала я",
+    "я сначала",
+    "я напишу",
+    "я изучу",
+    "начну",
+    "план",
+    "следующий шаг",
+    "попытаюсь",
+    "нужно определить",
+  ].some((marker) => normalized.includes(marker))
+}
+
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
   const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
@@ -1107,6 +1156,45 @@ const layer = Layer.effect(
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
+          const semenaAutocontinueEnabled =
+            process.env.SEMENA_AUTOCONTINUE !== "0" && String(lastUser.model.providerID) === "semena"
+          const shouldAutocontinueSemena =
+            semenaAutocontinueEnabled &&
+            lastAssistant?.finish &&
+            !["tool-calls"].includes(lastAssistant.finish) &&
+            !hasToolCalls &&
+            lastAssistant.parentID === lastUser.id &&
+            semenaAutocontinueCount(msgs) < SEMENA_AUTOCONTINUE_MAX &&
+            looksLikeUnfinishedSemenaStop(textFromParts(lastAssistantMsg?.parts))
+
+          if (shouldAutocontinueSemena) {
+            yield* Effect.logWarning("semena auto-continue after unfinished stop", {
+              "session.id": sessionID,
+              messageID: lastAssistant?.id,
+              finish: lastAssistant?.finish,
+            })
+            const continueMsg: SessionV1.User = {
+              id: MessageID.ascending(),
+              sessionID,
+              role: "user",
+              time: { created: Date.now() },
+              agent: lastUser.agent,
+              model: lastUser.model,
+            }
+            yield* sessions.updateMessage(continueMsg)
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: continueMsg.id,
+              sessionID,
+              type: "text",
+              text:
+                `${SEMENA_AUTOCONTINUE_MARKER} Продолжай выполнение исходной задачи. ` +
+                "Не отвечай планом и не показывай размышления. Выполни следующий конкретный шаг через инструмент. " +
+                "Если нужно писать код, напиши и запусти команду. Остановись только когда создан/изменен нужный файл или честно получена непреодолимая ошибка.",
+              synthetic: true,
+            } satisfies SessionV1.TextPart)
+            continue
+          }
 
           if (
             lastAssistant?.finish &&

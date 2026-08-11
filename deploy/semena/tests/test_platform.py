@@ -147,7 +147,17 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("@' ... '@ | py -3 -", instructions)
         self.assertIn("Госсорткомиссии `gossortrf.ru`", instructions)
         self.assertIn("arrFilter_pf[CULTURE_NAME]", instructions)
+        self.assertIn("Thinking Process", instructions)
         self.assertIn("Никогда не выводи служебные маркеры", instructions)
+
+    def test_desktop_autocontinues_unfinished_semena_stops(self) -> None:
+        prompt = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "prompt.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("SEMENA_AUTOCONTINUE_MARKER", prompt)
+        self.assertIn("looksLikeUnfinishedSemenaStop", prompt)
+        self.assertIn("semena auto-continue after unfinished stop", prompt)
+        self.assertIn('String(lastUser.model.providerID) === "semena"', prompt)
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
