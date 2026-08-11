@@ -1,4 +1,5 @@
 import * as http from "node:http"
+import { join } from "node:path"
 import * as tls from "node:tls"
 
 type NodeHttpWithEnvProxy = typeof http & {
@@ -81,11 +82,33 @@ async function stop() {
 }
 
 function prepareSidecarEnv(password: string, userDataPath: string) {
+  preferBundledPython()
   Object.assign(process.env, {
     OPENCODE_SERVER_USERNAME: "opencode",
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
+}
+
+function preferBundledPython() {
+  if (process.platform !== "win32") return
+  const localAppData = process.env.LOCALAPPDATA
+  if (!localAppData) return
+
+  const entries = [
+    join(localAppData, "Programs", "Python", "Python313"),
+    join(localAppData, "Programs", "Python", "Python313", "Scripts"),
+    join(localAppData, "Programs", "Python", "Launcher"),
+  ]
+  const current = process.env.Path ?? process.env.PATH ?? ""
+  const currentParts = current.split(";").filter(Boolean)
+  const lower = new Set(currentParts.map((item) => item.toLowerCase()))
+  const missing = entries.filter((item) => !lower.has(item.toLowerCase()))
+  if (missing.length === 0) return
+
+  const next = [...missing, ...currentParts].join(";")
+  process.env.Path = next
+  process.env.PATH = next
 }
 
 function ensureLoopbackNoProxy() {

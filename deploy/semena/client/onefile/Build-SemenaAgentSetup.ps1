@@ -18,11 +18,21 @@ if (-not $supportRoot) {
     throw "Support directory was not found."
 }
 $desktopSetup = Join-Path $repoRoot 'packages\desktop\dist\Semena-Agent-Setup-x64.exe'
+$pythonInstaller = Join-Path $repoRoot '.artifacts\python-runtime\python-3.13.13-amd64.exe'
+$pythonWheelRoot = Join-Path $repoRoot '.artifacts\python-wheels'
 $staging = Join-Path $env:TEMP ('semena-agent-onefile-' + [Guid]::NewGuid().ToString('N'))
 $nsiPath = Join-Path $staging 'SemenaAgentSetup.nsi'
 
 if (-not (Test-Path -LiteralPath $desktopSetup)) {
     throw "Application installer was not found: $desktopSetup"
+}
+if (-not (Test-Path -LiteralPath $pythonInstaller)) {
+    throw "Python installer was not found: $pythonInstaller"
+}
+foreach ($wheel in @('openpyxl-3.1.5-py2.py3-none-any.whl', 'et_xmlfile-2.0.0-py3-none-any.whl')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $pythonWheelRoot $wheel))) {
+        throw "Python wheel was not found: $wheel"
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
@@ -39,6 +49,9 @@ try {
     Copy-Item -LiteralPath (Join-Path $supportRoot 'AGENTS.md') -Destination (Join-Path $staging 'AGENTS.md') -Force
     Copy-Item -LiteralPath (Join-Path $supportRoot 'semena-agent-ca.crt') -Destination (Join-Path $staging 'semena-agent-ca.crt') -Force
     Copy-Item -LiteralPath $desktopSetup -Destination (Join-Path $staging 'Semena-Agent-Setup-x64.exe') -Force
+    Copy-Item -LiteralPath $pythonInstaller -Destination (Join-Path $staging 'python-3.13.13-amd64.exe') -Force
+    New-Item -ItemType Directory -Force -Path (Join-Path $staging 'python-wheels') | Out-Null
+    Copy-Item -Path (Join-Path $pythonWheelRoot '*.whl') -Destination (Join-Path $staging 'python-wheels') -Force
 
     $outputDir = Split-Path -Parent $OutputPath
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
@@ -67,6 +80,10 @@ Section "Install"
   File /oname=AGENTS.md "$staging\AGENTS.md"
   File /oname=semena-agent-ca.crt "$staging\semena-agent-ca.crt"
   File /oname=Semena-Agent-Setup-x64.exe "$staging\Semena-Agent-Setup-x64.exe"
+  File /oname=python-3.13.13-amd64.exe "$staging\python-3.13.13-amd64.exe"
+  SetOutPath "`$PLUGINSDIR\python-wheels"
+  File "$staging\python-wheels\*.whl"
+  SetOutPath "`$PLUGINSDIR"
 
   ReadEnvStr `$0 "SEMENA_AGENT_SETUP_API_KEY"
   StrCmp `$0 "" 0 with_key

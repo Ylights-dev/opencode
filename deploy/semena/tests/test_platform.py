@@ -106,9 +106,13 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("makensis.exe", builder)
         self.assertIn("SemenaAgentSetup.exe", builder)
         self.assertIn("Semena-Agent-Setup-x64.exe", builder)
+        self.assertIn("python-3.13.13-amd64.exe", builder)
+        self.assertIn("python-wheels", builder)
         self.assertNotIn("7z.sfx", builder)
         self.assertNotIn("iexpress.exe", builder)
         self.assertIn("Semena-Agent-Setup-x64.exe", embedded)
+        self.assertIn("Install-AgentPython", embedded)
+        self.assertIn("openpyxl", embedded)
         self.assertNotIn("Invoke-WebRequest", embedded)
         self.assertIn("Invoke-RestMethod -Method Post", embedded)
 
