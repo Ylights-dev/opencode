@@ -22,6 +22,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
+import { readSemenaTask, semenaTaskContract } from "./semena-task"
 
 export const Event = SessionCompactionEvent
 
@@ -381,7 +382,17 @@ const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      let nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      if (String(userMessage.model.providerID) === "semena") {
+        const task = readSemenaTask((yield* session.get(input.sessionID).pipe(Effect.orDie)).metadata)
+        if (task) {
+          nextPrompt = `${semenaTaskContract(task)}
+
+You are producing an internal compaction summary, not completing the employee request. Preserve the original request verbatim in the summary. Keep every unfinished requirement under Active or Next Move. Never mark a preparatory subtask as the completed objective and never invent tool results.
+
+${nextPrompt}`
+        }
+      }
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")

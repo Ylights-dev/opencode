@@ -48,13 +48,29 @@ authenticated TLS gateway. The employee client now selects the `semena-gemma4`
 Ollama alias so the runtime keeps Gemma's renderer/parser while forcing a
 16384-token context instead of the default 4096-token slot.
 
-Muse Glimmer 30B is relevant to this product because it is positioned for
+The live OpenCode regression was also repeated with `qwen3:30b-a3b` and the
+official `qwen3-coder:30b`. Both models used a 16384-token context. The first
+created a script with a hard-coded year instead of using registry evidence. The
+coder model explored the official site but then generated demo scripts that
+returned `нету` for every row. Neither model is safe as the employee default.
+
+Muse Glimmer 30B remains relevant to this product because it is positioned for
 autonomous local agents, reliable tool use, multi-step reasoning, and failure
-recovery. It is not the current production default because the Ollama build
-available on 2026-08-11 required a newer prerelease Ollama on our server, and
-the GGUF package is too close to the 16 GB GPU memory ceiling for a conservative
-employee rollout. Keep it on the next model-evaluation pass once NVIDIA support
-is stable.
+recovery. The 19 GB `UD-Q4_K_XL` GGUF was downloaded and tested on 2026-08-11,
+but Ollama 0.30.10 terminated before inference with `unknown model
+architecture: 'muse-glimmer'`. It therefore cannot be evaluated or deployed on
+the current supported inference stack. Do not replace Ollama solely for this
+candidate until its architecture is supported and the same tool-use evaluation
+passes.
+
+The OpenCode fork now keeps the employee's original request in durable session
+metadata, carries it through compaction, and checks completion against tool
+evidence. Tasks that require current external data, a changed artifact, and
+verification must perform those phases in that order. Repeated inspection is
+interrupted by a bounded progress watchdog. A helper script, a failed command,
+or an unverified file is no longer accepted as the requested result. These are
+model-independent orchestration guards; they do not add a registry-specific
+workflow or replace the model's general reasoning.
 
 ## Decision
 

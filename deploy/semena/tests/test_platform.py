@@ -155,12 +155,27 @@ class DeploymentTests(unittest.TestCase):
         prompt = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "prompt.ts").read_text(
             encoding="utf-8"
         )
+        task = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "semena-task.ts").read_text(
+            encoding="utf-8"
+        )
+        compaction = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "compaction.ts").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("SEMENA_AUTOCONTINUE_MARKER", prompt)
-        self.assertIn("looksLikeUnfinishedSemenaStop", prompt)
+        self.assertIn("assessSemenaCompletion", prompt)
+        self.assertIn("collectSemenaTaskEvidence", prompt)
         self.assertIn("semena auto-continue after unfinished stop", prompt)
         self.assertIn('String(lastUser.model.providerID) === "semena"', prompt)
-        self.assertIn("return !hasDoneSignal", prompt)
         self.assertIn("semenaAutocontinueAttempts", prompt)
+        self.assertIn("semena progress watchdog intervention", prompt)
+        self.assertIn("semena-progress-watchdog", prompt)
+        self.assertIn("semena progress watchdog restricted tools", prompt)
+        self.assertIn('new Set(["websearch", "webfetch"])', prompt)
+        self.assertIn("SEMENA_TOOL_OUTPUT_MAX_CHARS", prompt)
+        self.assertIn("the request requires a file or project change", task)
+        self.assertIn("the request requires current external data", task)
+        self.assertIn("Original employee request", task)
+        self.assertIn("Preserve the original request verbatim", compaction)
 
     def test_windows_public_installer_forces_production_channel(self) -> None:
         desktop = ROOT.parents[1] / "packages" / "desktop"
