@@ -88,6 +88,8 @@ function prepareSidecarEnv(password: string, userDataPath: string) {
     OPENCODE_SERVER_PASSWORD: password,
     OPENCODE_ENABLE_PARALLEL: process.env.OPENCODE_ENABLE_PARALLEL ?? "1",
     OPENCODE_WEBSEARCH_PROVIDER: process.env.OPENCODE_WEBSEARCH_PROVIDER ?? "parallel",
+    OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS:
+      process.env.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS ?? "3600000",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
 }

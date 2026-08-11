@@ -140,6 +140,7 @@ class DeploymentTests(unittest.TestCase):
         )
         self.assertIn("OPENCODE_ENABLE_PARALLEL", sidecar)
         self.assertIn('OPENCODE_WEBSEARCH_PROVIDER: process.env.OPENCODE_WEBSEARCH_PROVIDER ?? "parallel"', sidecar)
+        self.assertIn('process.env.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS ?? "3600000"', sidecar)
 
     def test_agent_instructions_cover_windows_excel_registry_workflow(self) -> None:
         instructions = (ROOT / "client" / "Служебные файлы" / "AGENTS.md").read_text(encoding="utf-8")
@@ -158,6 +159,18 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("looksLikeUnfinishedSemenaStop", prompt)
         self.assertIn("semena auto-continue after unfinished stop", prompt)
         self.assertIn('String(lastUser.model.providerID) === "semena"', prompt)
+        self.assertIn("return !hasDoneSignal", prompt)
+        self.assertIn("semenaAutocontinueAttempts", prompt)
+
+    def test_windows_public_installer_forces_production_channel(self) -> None:
+        desktop = ROOT.parents[1] / "packages" / "desktop"
+        package = json.loads((desktop / "package.json").read_text(encoding="utf-8"))
+        script = (desktop / "scripts" / "package-win-prod.ts").read_text(encoding="utf-8")
+        builder = (ROOT / "client" / "onefile" / "Build-SemenaAgentSetup.ps1").read_text(encoding="utf-8")
+
+        self.assertEqual(package["scripts"]["package:win:prod"], "bun ./scripts/package-win-prod.ts")
+        self.assertIn('OPENCODE_CHANNEL: "prod"', script)
+        self.assertIn("package:win:prod", builder)
 
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")

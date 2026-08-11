@@ -23,6 +23,23 @@ $pythonWheelRoot = Join-Path $repoRoot '.artifacts\python-wheels'
 $staging = Join-Path $env:TEMP ('semena-agent-onefile-' + [Guid]::NewGuid().ToString('N'))
 $nsiPath = Join-Path $staging 'SemenaAgentSetup.nsi'
 
+$bun = Get-Command bun -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
+if (-not $bun) {
+    $bundledBun = Join-Path (Split-Path $repoRoot -Parent) '.tools\bun-npm\node_modules\bun\bin\bun.exe'
+    if (Test-Path -LiteralPath $bundledBun) {
+        $bun = $bundledBun
+    }
+}
+if (-not $bun) {
+    throw 'Bun was not found. It is required to build the production desktop application.'
+}
+
+Write-Host 'Building production desktop application and branded icon...' -ForegroundColor Cyan
+& $bun run --cwd (Join-Path $repoRoot 'packages\desktop') package:win:prod
+if ($LASTEXITCODE -ne 0) {
+    throw "Production desktop build failed with exit code $LASTEXITCODE"
+}
+
 if (-not (Test-Path -LiteralPath $desktopSetup)) {
     throw "Application installer was not found: $desktopSetup"
 }

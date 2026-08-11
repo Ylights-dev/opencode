@@ -92,42 +92,13 @@ function textFromParts(parts: SessionV1.Part[] | undefined) {
     .trim()
 }
 
-function semenaAutocontinueCount(messages: SessionV1.WithParts[]) {
-  return messages.reduce(
-    (count, msg) =>
-      count +
-      msg.parts.filter((part) => part.type === "text" && part.synthetic && part.text.includes(SEMENA_AUTOCONTINUE_MARKER))
-        .length,
-    0,
-  )
-}
-
 function looksLikeUnfinishedSemenaStop(text: string | undefined) {
   if (!text) return true
   const hasDoneSignal =
-    /(^|\s)(готово|сделал|сделана|создан|создала|сохран[её]н|записан|обработано|результат|итог|файл создан|saved|processed|completed)(\s|:|\.|,|$)/i.test(
+    /(^|\s)(готово|задача выполнена|работа завершена|файл (создан|сохран[её]н|обновл[её]н|записан)|обработано \d+|done|task completed|file (created|saved|updated))(\s|:|\.|,|$)/i.test(
       text,
     )
-  if (hasDoneSignal) return false
-
-  const normalized = text.toLowerCase()
-  return [
-    "i will",
-    "let's",
-    "wait,",
-    "thought",
-    "thinking process",
-    "<channel",
-    "сначала я",
-    "я сначала",
-    "я напишу",
-    "я изучу",
-    "начну",
-    "план",
-    "следующий шаг",
-    "попытаюсь",
-    "нужно определить",
-  ].some((marker) => normalized.includes(marker))
+  return !hasDoneSignal
 }
 
 function mcpResourceBase64Size(value: string) {
@@ -1132,6 +1103,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let semenaAutocontinueAttempts = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1164,14 +1136,16 @@ const layer = Layer.effect(
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
             lastAssistant.parentID === lastUser.id &&
-            semenaAutocontinueCount(msgs) < SEMENA_AUTOCONTINUE_MAX &&
+            semenaAutocontinueAttempts < SEMENA_AUTOCONTINUE_MAX &&
             looksLikeUnfinishedSemenaStop(textFromParts(lastAssistantMsg?.parts))
 
           if (shouldAutocontinueSemena) {
+            semenaAutocontinueAttempts++
             yield* Effect.logWarning("semena auto-continue after unfinished stop", {
               "session.id": sessionID,
               messageID: lastAssistant?.id,
               finish: lastAssistant?.finish,
+              attempt: semenaAutocontinueAttempts,
             })
             const continueMsg: SessionV1.User = {
               id: MessageID.ascending(),
@@ -1188,9 +1162,10 @@ const layer = Layer.effect(
               sessionID,
               type: "text",
               text:
-                `${SEMENA_AUTOCONTINUE_MARKER} Продолжай выполнение исходной задачи. ` +
-                "Не отвечай планом и не показывай размышления. Выполни следующий конкретный шаг через инструмент. " +
-                "Если нужно писать код, напиши и запусти команду. Остановись только когда создан/изменен нужный файл или честно получена непреодолимая ошибка.",
+                `${SEMENA_AUTOCONTINUE_MARKER} Continue the original task now. ` +
+                "Do not answer with a plan, draft, internal reasoning, or a promise to continue. Use a tool for the next concrete action. " +
+                "Write and run any code you need. Stop only after the requested file/result is actually created and verified, " +
+                "then explicitly report that the task is completed and name the output file. If a command fails, diagnose it and try another approach.",
               synthetic: true,
             } satisfies SessionV1.TextPart)
             continue
