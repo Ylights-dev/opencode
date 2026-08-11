@@ -19,7 +19,7 @@ Employee Windows account
   -> per-user API key
   -> TLS gateway with per-user API-key authentication on 10.1.50.101
   -> Ollama on 127.0.0.1:11434
-  -> semena-code (qwen3.5:9b, 16384-token context)
+  -> gemma4:12b (Gemma 4 12B, 16384-token context)
 ```
 
 OpenCode runs on the employee computer so its file and shell tools operate on

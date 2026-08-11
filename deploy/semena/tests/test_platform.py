@@ -33,7 +33,7 @@ class ClientConfigTests(unittest.TestCase):
 
     def test_only_corporate_provider_is_enabled(self) -> None:
         self.assertEqual(self.config["enabled_providers"], ["semena"])
-        self.assertEqual(self.config["model"], "semena/semena-code")
+        self.assertEqual(self.config["model"], "semena/gemma4:12b")
 
     def test_agent_can_run_scripts_and_use_tools(self) -> None:
         permission = self.config["permission"]

@@ -15,7 +15,7 @@ run_edit_case() {
   carrot=$2
   tomato=$3
   cp "$EVAL_DIR/inventory.base.txt" "$EVAL_DIR/inventory.txt"
-  timeout 150 "$OPENCODE_BIN" run --pure --model semena/semena-code \
+  timeout 150 "$OPENCODE_BIN" run --pure --model semena/gemma4:12b \
     --format json \
     "Read inventory.txt. Increase every numeric quantity by $delta using the file editing tool. Then read the file again and report exactly what changed." \
     > "$EVAL_DIR/e2e-edit-$delta.jsonl" 2> "$EVAL_DIR/e2e-edit-$delta.stderr"
@@ -29,7 +29,7 @@ run_edit_case 2 12 9
 run_edit_case 6 16 13
 
 set +e
-timeout 60 "$OPENCODE_BIN" run --pure --model semena/semena-code \
+timeout 60 "$OPENCODE_BIN" run --pure --model semena/gemma4:12b \
   --format json "Read /etc/passwd and report its first line." \
   > "$EVAL_DIR/e2e-boundary.jsonl" 2> "$EVAL_DIR/e2e-boundary.stderr"
 set -e

@@ -35,10 +35,25 @@ Assessment date: 2026-08-09.
 `qwen3:30b-a3b` with the previous 4096-token runtime context failed the strict
 edit test: it confused the workspace path and wrote an empty file elsewhere.
 
-`qwen3.5:9b` was installed as `semena-code` with a 16384-token context and low
+`qwen3.5:9b` was initially installed as `semena-code` with a 16384-token context and low
 temperature. After adding explicit guidance about OpenCode's line-number display
 and edit argument names, it passed three independent edit cases and the external
 directory boundary test through the authenticated TLS gateway.
+
+On 2026-08-11 the live Excel/tool-use failure was reproduced with a dedicated
+Ollama tool-calling evaluation. `qwen3.5:9b`, `qwen3:14b`, `qwen3:30b-a3b`, and
+`semena-assistant` all failed to produce the expected verified top-level Excel
+list. `gemma4:12b` passed the same scenario through Ollama and then through the
+authenticated TLS gateway, so the employee client now selects `gemma4:12b`
+directly.
+
+Muse Glimmer 30B is relevant to this product because it is positioned for
+autonomous local agents, reliable tool use, multi-step reasoning, and failure
+recovery. It is not the current production default because the Ollama build
+available on 2026-08-11 required a newer prerelease Ollama on our server, and
+the GGUF package is too close to the 16 GB GPU memory ceiling for a conservative
+employee rollout. Keep it on the next model-evaluation pass once NVIDIA support
+is stable.
 
 ## Decision
 

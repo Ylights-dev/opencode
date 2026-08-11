@@ -46,10 +46,10 @@ def main() -> int:
 
     with request(f"{args.base_url}/v1/models", args.ca, key=args.key) as response:
         models = json.load(response)
-        assert any(item["id"].startswith("semena-code") for item in models["data"])
+        assert any(item["id"] == "gemma4:12b" for item in models["data"])
 
     payload = {
-        "model": "semena-code",
+        "model": "gemma4:12b",
         "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
         "temperature": 0,
         "max_tokens": 128,
