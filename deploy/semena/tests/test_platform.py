@@ -132,6 +132,13 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("Семена - Агент", onboarding)
         self.assertNotIn("Default Project", onboarding)
 
+    def test_desktop_sidecar_enables_websearch_for_local_provider(self) -> None:
+        sidecar = (ROOT.parents[1] / "packages" / "desktop" / "src" / "main" / "sidecar.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("OPENCODE_ENABLE_PARALLEL", sidecar)
+        self.assertIn('OPENCODE_WEBSEARCH_PROVIDER: process.env.OPENCODE_WEBSEARCH_PROVIDER ?? "parallel"', sidecar)
+
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
         self.assertIn("if [ ! -f .env ]", bootstrap)
