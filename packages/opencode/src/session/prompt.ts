@@ -1216,7 +1216,7 @@ const layer = Layer.effect(
               yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
               const instruction =
                 phase === "external"
-                  ? `${repeatedForcedPhase ? "Calls outside the required phase were rejected. " : ""}Local inspection has repeated without the required external lookup. Stop printing more file ranges. Consolidate what you know in a reusable script or bounded data file and perform the required web/network action now.`
+                  ? `${repeatedForcedPhase ? "The required external evidence is still missing. " : ""}Local inspection has repeated without the required external lookup. Consolidate what you know in a reusable script or bounded data file and obtain the required current web/network evidence now. You may keep using local tools to extract or prepare lookup inputs.`
                   : phase === "mutation"
                     ? "Required research has started, but no requested result has been written. Stop repeating inspection and create or update the requested artifact now, using a reusable script for bulk work."
                     : "A result was changed but has not been independently verified. Use a separate read, test, or validation command now and fix any discrepancy."
@@ -1444,16 +1444,7 @@ const layer = Layer.effect(
 
             const semenaForcedPhase = semenaTask?.forcedPhase
             if (String(lastUser.model.providerID) === "semena" && semenaForcedPhase) {
-              const allowed =
-                semenaForcedPhase === "external"
-                  ? new Set(["websearch", "webfetch"])
-                  : semenaForcedPhase === "mutation"
-                    ? new Set(["write", "edit", "bash", "shell", "apply_patch"])
-                    : new Set(["read", "bash", "shell", "glob", "grep"])
-              for (const name of Object.keys(tools)) {
-                if (!allowed.has(name)) delete tools[name]
-              }
-              yield* Effect.logWarning("semena progress watchdog restricted tools", {
+              yield* Effect.logWarning("semena progress watchdog guided tools", {
                 "session.id": sessionID,
                 phase: semenaForcedPhase,
                 tools: Object.keys(tools).join(","),
@@ -1495,6 +1486,15 @@ const layer = Layer.effect(
             ]
             if (String(lastUser.model.providerID) === "semena" && semenaTask) {
               system.push(semenaTaskContract(semenaTask))
+            }
+            if (String(lastUser.model.providerID) === "semena" && semenaForcedPhase) {
+              const phaseGuidance =
+                semenaForcedPhase === "external"
+                  ? "Current evidence target: obtain current external data. All user-authorized tools remain available. Use websearch, webfetch, or shell network requests as appropriate; local extraction and scripting needed to form lookup queries are allowed. Do not claim completion until the external evidence is captured."
+                  : semenaForcedPhase === "mutation"
+                    ? "Current evidence target: write the requested result. All user-authorized tools remain available. Use any inspection, scripting, or editing tools needed, but do not claim completion until the requested artifact has actually been created or updated."
+                    : "Current evidence target: verify the produced result independently. All user-authorized tools remain available. Re-read, test, or validate the artifact and correct any discrepancy before claiming completion."
+              system.push(phaseGuidance)
             }
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
