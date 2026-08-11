@@ -44,8 +44,9 @@ On 2026-08-11 the live Excel/tool-use failure was reproduced with a dedicated
 Ollama tool-calling evaluation. `qwen3.5:9b`, `qwen3:14b`, `qwen3:30b-a3b`, and
 `semena-assistant` all failed to produce the expected verified top-level Excel
 list. `gemma4:12b` passed the same scenario through Ollama and then through the
-authenticated TLS gateway, so the employee client now selects `gemma4:12b`
-directly.
+authenticated TLS gateway. The employee client now selects the `semena-gemma4`
+Ollama alias so the runtime keeps Gemma's renderer/parser while forcing a
+16384-token context instead of the default 4096-token slot.
 
 Muse Glimmer 30B is relevant to this product because it is positioned for
 autonomous local agents, reliable tool use, multi-step reasoning, and failure

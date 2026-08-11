@@ -1,7 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "ollama/gemma4:12b",
-  "small_model": "ollama/gemma4:12b",
+  "model": "ollama/semena-gemma4",
+  "small_model": "ollama/semena-gemma4",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -10,7 +10,7 @@
         "baseURL": "http://127.0.0.1:11434/v1"
       },
       "models": {
-        "gemma4:12b": {
+        "semena-gemma4": {
           "name": "Semena Agent (Gemma 4 12B)",
           "limit": {
             "context": 16384,

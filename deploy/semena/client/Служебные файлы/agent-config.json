@@ -1,8 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["semena"],
-  "model": "semena/gemma4:12b",
-  "small_model": "semena/gemma4:12b",
+  "model": "semena/semena-gemma4",
+  "small_model": "semena/semena-gemma4",
   "provider": {
     "semena": {
       "npm": "@ai-sdk/openai-compatible",
@@ -12,7 +12,7 @@
         "apiKey": "{env:SEMENA_AGENT_API_KEY}"
       },
       "models": {
-        "gemma4:12b": {
+        "semena-gemma4": {
           "name": "Семена Code",
           "limit": {
             "context": 16384,
