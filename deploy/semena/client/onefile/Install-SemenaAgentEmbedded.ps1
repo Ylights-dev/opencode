@@ -122,9 +122,9 @@ function Install-AgentPython {
         throw 'Во встроенном установщике отсутствуют Python-пакеты.'
     }
 
-    & $launcher -3 -m pip install --no-index --find-links $pythonWheelRoot openpyxl
+    & $launcher -3 -m pip install --no-index --find-links $pythonWheelRoot openpyxl xlrd
     if ($LASTEXITCODE -ne 0) {
-        throw 'Не удалось установить Python-пакет openpyxl.'
+        throw 'Не удалось установить Python-пакеты openpyxl и xlrd.'
     }
 
     if (-not (Test-AgentPython)) {
@@ -171,6 +171,7 @@ $env:SEMENA_AGENT_API_KEY = $ApiKey
 
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'agent-config.json') -Destination (Join-Path $configRoot 'opencode.json') -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'AGENTS.md') -Destination (Join-Path $Workspace 'AGENTS.md') -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'semena_registry_check.py') -Destination (Join-Path $Workspace 'semena_registry_check.py') -Force
 Copy-Item -LiteralPath $certificateSource -Destination $certificateTarget -Force
 Install-AgentPython
 

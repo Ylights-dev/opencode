@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $setupUrl = 'http://10.1.50.101:3010/downloads/Semena-Agent-Setup-x64.exe'
-$expectedHash = 'C76B69A74D0987ED09F088AD9E9B98ECDC195D8918F223816AD40F9A78F73CDB'
+$expectedHash = 'FD0FFC00AF3B106389B356D7985437A99C138CD1F873C38B561E0706B32BCA84'
 $enrollUrl = 'https://10.1.50.101:8443/enroll'
 $runtimeRoot = Join-Path $env:LOCALAPPDATA 'Семена - Агент'
 $configRoot = Join-Path $runtimeRoot 'config\opencode'
@@ -63,6 +63,7 @@ $env:SEMENA_AGENT_API_KEY = $ApiKey
 
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'agent-config.json') -Destination (Join-Path $configRoot 'opencode.json') -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'AGENTS.md') -Destination (Join-Path $Workspace 'AGENTS.md') -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'semena_registry_check.py') -Destination (Join-Path $Workspace 'semena_registry_check.py') -Force
 Copy-Item -LiteralPath $certificateSource -Destination $certificateTarget -Force
 
 Write-Host 'Скачиваю приложение...' -ForegroundColor Cyan
