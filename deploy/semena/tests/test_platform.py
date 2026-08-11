@@ -171,6 +171,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("semena-progress-watchdog", prompt)
         self.assertIn("semena progress watchdog guided tools", prompt)
         self.assertIn("All user-authorized tools remain available", prompt)
+        self.assertIn('{ type: "tool", toolName: semenaForcedTool }', prompt)
+        self.assertIn('forcedTool: phase === "external" ? "websearch" : undefined', prompt)
         self.assertNotIn("semena progress watchdog restricted tools", prompt)
         self.assertNotIn('new Set(["websearch", "webfetch"])', prompt)
         self.assertIn("SEMENA_TOOL_OUTPUT_MAX_CHARS", prompt)

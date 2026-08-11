@@ -12,6 +12,7 @@ import {
 import type { ModelMessage } from "ai"
 import type { Provider } from "@/provider/provider"
 import { isRecord } from "@/util/record"
+import type { StreamToolChoice } from "../llm"
 
 type ToolInput = {
   readonly description?: string
@@ -25,7 +26,7 @@ export type RequestInput = {
   readonly system?: readonly string[]
   readonly messages: readonly ModelMessage[]
   readonly tools?: Record<string, ToolInput>
-  readonly toolChoice?: "auto" | "required" | "none"
+  readonly toolChoice?: StreamToolChoice
   readonly temperature?: number
   readonly topP?: number
   readonly topK?: number
@@ -187,7 +188,7 @@ export const request = (input: RequestInput) => {
     system: [...(input.system ?? []).map(SystemPart.make), ...converted.system],
     messages: converted.messages,
     tools: tools(input.tools),
-    toolChoice: input.toolChoice,
+    toolChoice: typeof input.toolChoice === "object" ? input.toolChoice.toolName : input.toolChoice,
     generation: generation(input),
     providerOptions: input.providerOptions,
   })

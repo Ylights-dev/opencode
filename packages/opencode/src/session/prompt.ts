@@ -1195,7 +1195,7 @@ const layer = Layer.effect(
             const phase = semenaRequiredPhase(requirements, evidence!)
             const toolCount = (evidence?.completedTools ?? 0) + (evidence?.failedTools ?? 0)
             if (semenaTask?.forcedPhase && phase !== semenaTask.forcedPhase) {
-              semenaTask = { ...semenaTask, forcedPhase: undefined }
+              semenaTask = { ...semenaTask, forcedPhase: undefined, forcedTool: undefined }
               session.metadata = { ...session.metadata, semena_task: semenaTask }
               yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
             }
@@ -1211,7 +1211,11 @@ const layer = Layer.effect(
               semenaProgressInterventions++
               semenaProgressPhase = phase
               semenaProgressToolCount = toolCount
-              semenaTask = { ...semenaTask, forcedPhase: phase }
+              semenaTask = {
+                ...semenaTask,
+                forcedPhase: phase,
+                forcedTool: phase === "external" ? "websearch" : undefined,
+              }
               session.metadata = { ...session.metadata, semena_task: semenaTask }
               yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
               const instruction =
@@ -1443,10 +1447,12 @@ const layer = Layer.effect(
             )
 
             const semenaForcedPhase = semenaTask?.forcedPhase
+            const semenaForcedTool = semenaTask?.forcedTool
             if (String(lastUser.model.providerID) === "semena" && semenaForcedPhase) {
               yield* Effect.logWarning("semena progress watchdog guided tools", {
                 "session.id": sessionID,
                 phase: semenaForcedPhase,
+                forcedTool: semenaForcedTool ?? "",
                 tools: Object.keys(tools).join(","),
               })
             }
@@ -1512,9 +1518,13 @@ const layer = Layer.effect(
               tools,
               model,
               toolChoice:
-                format.type === "json_schema" || (semenaForcedPhase && Object.keys(tools).length > 0)
+                format.type === "json_schema"
                   ? "required"
-                  : undefined,
+                  : semenaForcedTool && tools[semenaForcedTool]
+                    ? { type: "tool", toolName: semenaForcedTool }
+                    : semenaForcedPhase && Object.keys(tools).length > 0
+                      ? "required"
+                      : undefined,
             })
 
             if (structured !== undefined) {

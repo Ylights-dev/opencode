@@ -12,6 +12,7 @@ export interface SemenaTaskState {
   startedAt: number
   completedAt?: number
   forcedPhase?: "external" | "mutation" | "verification"
+  forcedTool?: "websearch"
 }
 
 export interface SemenaTaskEvidence {
@@ -74,6 +75,7 @@ export function readSemenaTask(metadata: Record<string, unknown> | undefined): S
     ...(raw.forcedPhase === "external" || raw.forcedPhase === "mutation" || raw.forcedPhase === "verification"
       ? { forcedPhase: raw.forcedPhase }
       : {}),
+    ...(raw.forcedTool === "websearch" ? { forcedTool: raw.forcedTool } : {}),
   }
 }
 

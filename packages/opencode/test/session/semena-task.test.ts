@@ -49,8 +49,16 @@ describe("semena durable task state", () => {
     ).toEqual({ root: "Запусти тесты", updates: ["Исправь ошибки"], startedAt: 42 })
     expect(readSemenaTask({ semena_task: { root: 123 } })).toBeUndefined()
     expect(
-      readSemenaTask({ semena_task: { root: "Task", updates: [], startedAt: 42, forcedPhase: "external" } }),
-    ).toMatchObject({ forcedPhase: "external" })
+      readSemenaTask({
+        semena_task: {
+          root: "Task",
+          updates: [],
+          startedAt: 42,
+          forcedPhase: "external",
+          forcedTool: "websearch",
+        },
+      }),
+    ).toMatchObject({ forcedPhase: "external", forcedTool: "websearch" })
   })
 
   test("starts a fresh durable task after the previous one completed", () => {

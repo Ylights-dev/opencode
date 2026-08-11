@@ -18,6 +18,7 @@ import {
 } from "@opencode-ai/llm"
 import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
+import type { StreamToolChoice } from "../llm"
 
 export type RuntimeStatus =
   | { readonly type: "supported"; readonly apiKey: string; readonly baseURL?: string }
@@ -33,7 +34,7 @@ type StreamInput = {
   readonly llmClient: LLMClientShape
   readonly messages: ModelMessage[]
   readonly tools: Record<string, Tool>
-  readonly toolChoice?: "auto" | "required" | "none"
+  readonly toolChoice?: StreamToolChoice
   readonly temperature?: number
   readonly topP?: number
   readonly topK?: number

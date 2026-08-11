@@ -32,6 +32,8 @@ import { LLMRequestPrep } from "./llm/request"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+export type StreamToolChoice = "auto" | "required" | "none" | { type: "tool"; toolName: string }
+
 export type StreamInput = {
   user: SessionV1.User
   sessionID: string
@@ -44,7 +46,7 @@ export type StreamInput = {
   small?: boolean
   tools: Record<string, Tool>
   retries?: number
-  toolChoice?: "auto" | "required" | "none"
+  toolChoice?: StreamToolChoice
 }
 
 export type StreamRequest = StreamInput & {
