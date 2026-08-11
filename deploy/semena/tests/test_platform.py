@@ -139,6 +139,14 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("OPENCODE_ENABLE_PARALLEL", sidecar)
         self.assertIn('OPENCODE_WEBSEARCH_PROVIDER: process.env.OPENCODE_WEBSEARCH_PROVIDER ?? "parallel"', sidecar)
 
+    def test_agent_instructions_cover_windows_excel_registry_workflow(self) -> None:
+        instructions = (ROOT / "client" / "Служебные файлы" / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("Не выбирай самый большой файл", instructions)
+        self.assertIn("@' ... '@ | py -3 -", instructions)
+        self.assertIn("Госсорткомиссии `gossortrf.ru`", instructions)
+        self.assertIn("arrFilter_pf[CULTURE_NAME]", instructions)
+        self.assertIn("Никогда не выводи служебные маркеры", instructions)
+
     def test_bootstrap_generates_secrets_and_does_not_overwrite_them(self) -> None:
         bootstrap = (ROOT / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
         self.assertIn("if [ ! -f .env ]", bootstrap)
