@@ -170,6 +170,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("semena progress watchdog intervention", prompt)
         self.assertIn("semena-progress-watchdog", prompt)
         self.assertIn("semena progress watchdog guided tools", prompt)
+        self.assertIn("semena skipped early auto-compaction", prompt)
+        self.assertIn("step < 20", prompt)
         self.assertIn("All user-authorized tools remain available", prompt)
         self.assertIn("repeatedFailureStreak", prompt)
         self.assertNotIn('{ type: "tool", toolName: semenaForcedTool }', prompt)

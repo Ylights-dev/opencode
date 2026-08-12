@@ -1370,13 +1370,20 @@ const layer = Layer.effect(
             continue
           }
 
-          if (
-            lastFinished &&
-            lastFinished.summary !== true &&
-            (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
-          ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-            continue
+          const isEarlySemenaTask = String(lastUser.model.providerID) === "semena" && !!semenaTask && step < 20
+          if (lastFinished && lastFinished.summary !== true) {
+            const overflow = yield* compaction.isOverflow({ tokens: lastFinished.tokens, model })
+            if (overflow && isEarlySemenaTask) {
+              yield* Effect.logWarning("semena skipped early auto-compaction", {
+                "session.id": sessionID,
+                step,
+                messageID: lastFinished.id,
+              })
+            }
+            if (overflow && !isEarlySemenaTask) {
+              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              continue
+            }
           }
 
           const agent = yield* agents.get(lastUser.agent)
