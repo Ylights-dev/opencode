@@ -151,38 +151,20 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("Thinking Process", instructions)
         self.assertIn("Никогда не выводи служебные маркеры", instructions)
 
-    def test_desktop_autocontinues_unfinished_semena_stops(self) -> None:
+    def test_desktop_keeps_upstream_opencode_prompt_loop(self) -> None:
         prompt = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "prompt.ts").read_text(
-            encoding="utf-8"
-        )
-        task = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "semena-task.ts").read_text(
             encoding="utf-8"
         )
         compaction = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "compaction.ts").read_text(
             encoding="utf-8"
         )
-        self.assertIn("SEMENA_AUTOCONTINUE_MARKER", prompt)
-        self.assertIn("assessSemenaCompletion", prompt)
-        self.assertIn("collectSemenaTaskEvidence", prompt)
-        self.assertIn("semena auto-continue after unfinished stop", prompt)
-        self.assertIn('String(lastUser.model.providerID) === "semena"', prompt)
-        self.assertIn("semenaAutocontinueAttempts", prompt)
-        self.assertIn("semena progress watchdog intervention", prompt)
-        self.assertIn("semena-progress-watchdog", prompt)
-        self.assertIn("semena progress watchdog guided tools", prompt)
-        self.assertIn("semena skipped early auto-compaction", prompt)
-        self.assertIn("step < 20", prompt)
-        self.assertIn("All user-authorized tools remain available", prompt)
-        self.assertIn("repeatedFailureStreak", prompt)
-        self.assertNotIn('{ type: "tool", toolName: semenaForcedTool }', prompt)
-        self.assertNotIn('forcedTool: phase === "external" ? "websearch" : undefined', prompt)
-        self.assertNotIn("semena progress watchdog restricted tools", prompt)
-        self.assertNotIn('new Set(["websearch", "webfetch"])', prompt)
-        self.assertIn("SEMENA_TOOL_OUTPUT_MAX_CHARS", prompt)
-        self.assertIn("the request requires a file or project change", task)
-        self.assertIn("the request requires current external data", task)
-        self.assertIn("Original employee request", task)
-        self.assertIn("Preserve the original request verbatim", compaction)
+        self.assertIn("compaction.isOverflow", prompt)
+        self.assertNotIn("SEMENA_AUTOCONTINUE", prompt)
+        self.assertNotIn("semena auto-continue", prompt)
+        self.assertNotIn("semena-progress-watchdog", prompt)
+        self.assertNotIn("semenaTaskContract", prompt)
+        self.assertNotIn("semena-task", prompt)
+        self.assertNotIn("Preserve the original request verbatim", compaction)
 
     def test_windows_public_installer_forces_production_channel(self) -> None:
         desktop = ROOT.parents[1] / "packages" / "desktop"

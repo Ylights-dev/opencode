@@ -56,17 +56,6 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
-import {
-  assessSemenaCompletion,
-  collectSemenaTaskEvidence,
-  readSemenaTask,
-  semenaRequiredPhase,
-  semenaTaskContract,
-  semenaTaskRequirements,
-  updateSemenaTask,
-  type SemenaTaskEvidence,
-  type SemenaTaskState,
-} from "./semena-task"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -91,20 +80,6 @@ IMPORTANT:
 - This tool provides your final answer - no further actions are taken after calling it`
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
-
-const SEMENA_AUTOCONTINUE_MARKER = "[semena-auto-continue]"
-const SEMENA_AUTOCONTINUE_MAX = Number.parseInt(process.env.SEMENA_AUTOCONTINUE_MAX ?? "24", 10)
-const SEMENA_TOOL_OUTPUT_MAX_CHARS = Number.parseInt(process.env.SEMENA_TOOL_OUTPUT_MAX_CHARS ?? "8000", 10)
-const SEMENA_PROGRESS_THRESHOLD = Number.parseInt(process.env.SEMENA_PROGRESS_THRESHOLD ?? "6", 10)
-const SEMENA_PROGRESS_INTERVAL = Number.parseInt(process.env.SEMENA_PROGRESS_INTERVAL ?? "6", 10)
-
-function textFromParts(parts: SessionV1.Part[] | undefined) {
-  return parts
-    ?.filter((part): part is SessionV1.TextPart => part.type === "text")
-    .map((part) => part.text)
-    .join("\n")
-    .trim()
-}
 
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
@@ -1080,15 +1055,6 @@ const layer = Layer.effect(
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
-      const isSemenaHumanRequest =
-        String(message.info.model.providerID) === "semena" &&
-        !message.parts.some((part) => "synthetic" in part && part.synthetic === true)
-      const request = textFromParts(message.parts)
-      if (isSemenaHumanRequest && request) {
-        const task = updateSemenaTask(readSemenaTask(session.metadata), request, message.info.time.created)
-        session.metadata = { ...session.metadata, semena_task: task }
-        yield* sessions.setMetadata({ sessionID: session.id, metadata: session.metadata })
-      }
       yield* sessions.touch(input.sessionID)
 
       const permissions: PermissionV1.Rule[] = []
@@ -1117,12 +1083,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
-        let semenaAutocontinueAttempts = 0
-        let semenaProgressInterventions = 0
-        let semenaProgressPhase = ""
-        let semenaProgressToolCount = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
-        let semenaTask: SemenaTaskState | undefined = readSemenaTask(session.metadata)
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1146,174 +1107,6 @@ const layer = Layer.effect(
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
-          const semenaAutocontinueEnabled =
-            process.env.SEMENA_AUTOCONTINUE !== "0" && String(lastUser.model.providerID) === "semena"
-          if (semenaAutocontinueEnabled && !semenaTask) {
-            const all = (yield* sessions.messages({ sessionID }).pipe(Effect.orDie)).sort(
-              (a, b) => a.info.time.created - b.info.time.created,
-            )
-            const requests = all.filter(
-              (message) =>
-                message.info.role === "user" &&
-                !message.parts.some((part) => "synthetic" in part && part.synthetic === true) &&
-                !!textFromParts(message.parts),
-            )
-            for (const requestMessage of requests) {
-              const text = textFromParts(requestMessage.parts)
-              if (!text) continue
-              semenaTask = updateSemenaTask(semenaTask, text, requestMessage.info.time.created)
-            }
-            if (semenaTask) {
-              session.metadata = { ...session.metadata, semena_task: semenaTask }
-              yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
-            }
-          }
-
-          const isFinishedCandidate =
-            !!lastAssistant?.finish &&
-            !["tool-calls"].includes(lastAssistant.finish) &&
-            !hasToolCalls &&
-            lastAssistant.parentID === lastUser.id
-          let semenaHistory: SessionV1.WithParts[] | undefined
-          let semenaEvidence: SemenaTaskEvidence | undefined
-          const loadSemenaEvidence = Effect.fnUntraced(function* () {
-            if (!semenaTask) return
-            semenaHistory ??= yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
-            semenaEvidence ??= collectSemenaTaskEvidence(semenaHistory, semenaTask)
-            return semenaEvidence
-          })
-
-          if (
-            semenaAutocontinueEnabled &&
-            semenaTask &&
-            lastAssistant &&
-            hasToolCalls &&
-            lastAssistant.parentID === lastUser.id
-          ) {
-            const evidence = yield* loadSemenaEvidence()
-            const requirements = semenaTaskRequirements(semenaTask)
-            const phase = semenaRequiredPhase(requirements, evidence!)
-            const toolCount = evidence?.usefulTools ?? 0
-            const repeatedFailure = (evidence?.repeatedFailureStreak ?? 0) >= 2
-            if (semenaTask?.forcedPhase && phase !== semenaTask.forcedPhase) {
-              semenaTask = { ...semenaTask, forcedPhase: undefined, forcedTool: undefined }
-              session.metadata = { ...session.metadata, semena_task: semenaTask }
-              yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
-            }
-            const phaseChanged = phase !== semenaProgressPhase
-            const stalled =
-              toolCount >= SEMENA_PROGRESS_THRESHOLD && toolCount - semenaProgressToolCount >= SEMENA_PROGRESS_INTERVAL
-            if (
-              phase &&
-              (repeatedFailure || (phaseChanged ? toolCount >= SEMENA_PROGRESS_THRESHOLD : stalled)) &&
-              semenaProgressInterventions < 6
-            ) {
-              const repeatedForcedPhase = semenaTask.forcedPhase === phase
-              semenaProgressInterventions++
-              semenaProgressPhase = phase
-              semenaProgressToolCount = toolCount
-              semenaTask = {
-                ...semenaTask,
-                forcedPhase: phase,
-                forcedTool: undefined,
-              }
-              session.metadata = { ...session.metadata, semena_task: semenaTask }
-              yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
-              const instruction =
-                (repeatedFailure
-                  ? `The last tool pattern is failing repeatedly (${evidence?.repeatedFailure ?? "same failure"}). Do not run that command shape again. `
-                  : "") +
-                (phase === "external"
-                  ? `${repeatedForcedPhase ? "The required external evidence is still missing. " : ""}Local inspection has not produced the required external lookup. Use websearch/webfetch when available, or a PowerShell network request, and capture current web evidence before writing the final result.`
-                  : phase === "mutation"
-                    ? "Required research has started, but no requested result has been written. Stop repeating inspection and create or update the requested artifact now, using a reusable script for bulk work."
-                    : "A result was changed but has not been independently verified. Use a separate read, test, or validation command now and fix any discrepancy.")
-              yield* Effect.logWarning("semena progress watchdog intervention", {
-                "session.id": sessionID,
-                phase,
-                toolCount,
-                failedTools: evidence?.failedTools ?? 0,
-                repeatedFailureStreak: evidence?.repeatedFailureStreak ?? 0,
-                attempt: semenaProgressInterventions,
-              })
-              const progressMsg: SessionV1.User = {
-                id: MessageID.ascending(),
-                sessionID,
-                role: "user",
-                time: { created: Date.now() },
-                agent: lastUser.agent,
-                model: lastUser.model,
-              }
-              yield* sessions.updateMessage(progressMsg)
-              yield* sessions.updatePart({
-                id: PartID.ascending(),
-                messageID: progressMsg.id,
-                sessionID,
-                type: "text",
-                text: `[semena-progress-watchdog] ${instruction} Do not answer with a plan; use the next concrete tool. The durable original request remains unchanged.`,
-                synthetic: true,
-              } satisfies SessionV1.TextPart)
-              if (semenaProgressInterventions > 1 && semenaProgressInterventions % 2 === 0) {
-                yield* compaction.create({
-                  sessionID,
-                  agent: lastUser.agent,
-                  model: lastUser.model,
-                  auto: true,
-                })
-              }
-              continue
-            }
-          }
-
-          let semenaAssessment: ReturnType<typeof assessSemenaCompletion> | undefined
-          if (semenaAutocontinueEnabled && semenaTask && isFinishedCandidate) {
-            const evidence = yield* loadSemenaEvidence()
-            semenaAssessment = assessSemenaCompletion({
-              task: semenaTask,
-              evidence: evidence!,
-              assistantText: textFromParts(lastAssistantMsg?.parts),
-              finish: lastAssistant?.finish,
-            })
-          }
-          const shouldAutocontinueSemena =
-            semenaAutocontinueEnabled &&
-            isFinishedCandidate &&
-            semenaAutocontinueAttempts < SEMENA_AUTOCONTINUE_MAX &&
-            semenaAssessment?.complete === false
-
-          if (shouldAutocontinueSemena) {
-            semenaAutocontinueAttempts++
-            yield* Effect.logWarning("semena auto-continue after unfinished stop", {
-              "session.id": sessionID,
-              messageID: lastAssistant?.id,
-              finish: lastAssistant?.finish,
-              attempt: semenaAutocontinueAttempts,
-              reason: semenaAssessment?.reason,
-            })
-            const continueMsg: SessionV1.User = {
-              id: MessageID.ascending(),
-              sessionID,
-              role: "user",
-              time: { created: Date.now() },
-              agent: lastUser.agent,
-              model: lastUser.model,
-            }
-            yield* sessions.updateMessage(continueMsg)
-            yield* sessions.updatePart({
-              id: PartID.ascending(),
-              messageID: continueMsg.id,
-              sessionID,
-              type: "text",
-              text:
-                `${SEMENA_AUTOCONTINUE_MARKER} Continue the original task now. ` +
-                `The previous stop was rejected because ${semenaAssessment?.reason ?? "the original task is unfinished"}. ` +
-                "Do not answer with a plan, draft, internal reasoning, or a promise to continue. Use a tool for the next concrete action. " +
-                "Write and run any code you need. Stop only after the requested file/result is actually created and verified, " +
-                "then explicitly report that the task is completed and name the output file. If a command fails, diagnose it and try another approach.",
-              synthetic: true,
-            } satisfies SessionV1.TextPart)
-            continue
-          }
 
           if (
             lastAssistant?.finish &&
@@ -1321,11 +1114,6 @@ const layer = Layer.effect(
             !hasToolCalls &&
             lastAssistant.parentID === lastUser.id
           ) {
-            if (semenaAssessment?.complete && semenaTask && !semenaTask.completedAt) {
-              semenaTask = { ...semenaTask, completedAt: Date.now() }
-              session.metadata = { ...session.metadata, semena_task: semenaTask }
-              yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
-            }
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
             )
@@ -1370,20 +1158,13 @@ const layer = Layer.effect(
             continue
           }
 
-          const isEarlySemenaTask = String(lastUser.model.providerID) === "semena" && !!semenaTask && step < 20
-          if (lastFinished && lastFinished.summary !== true) {
-            const overflow = yield* compaction.isOverflow({ tokens: lastFinished.tokens, model })
-            if (overflow && isEarlySemenaTask) {
-              yield* Effect.logWarning("semena skipped early auto-compaction", {
-                "session.id": sessionID,
-                step,
-                messageID: lastFinished.id,
-              })
-            }
-            if (overflow && !isEarlySemenaTask) {
-              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-              continue
-            }
+          if (
+            lastFinished &&
+            lastFinished.summary !== true &&
+            (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
+          ) {
+            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            continue
           }
 
           const agent = yield* agents.get(lastUser.agent)
@@ -1459,15 +1240,6 @@ const layer = Layer.effect(
               Effect.provideService(RuntimeFlags.Service, flags),
             )
 
-            const semenaForcedPhase = semenaTask?.forcedPhase
-            if (String(lastUser.model.providerID) === "semena" && semenaForcedPhase) {
-              yield* Effect.logWarning("semena progress watchdog guided tools", {
-                "session.id": sessionID,
-                phase: semenaForcedPhase,
-                tools: Object.keys(tools).join(","),
-              })
-            }
-
             if (lastUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
                 schema: lastUser.format.schema,
@@ -1487,13 +1259,7 @@ const layer = Layer.effect(
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(
-                msgs,
-                model,
-                String(lastUser.model.providerID) === "semena"
-                  ? { toolOutputMaxChars: SEMENA_TOOL_OUTPUT_MAX_CHARS }
-                  : undefined,
-              ),
+              MessageV2.toModelMessagesEffect(msgs, model),
             ])
             const system = [
               ...env,
@@ -1501,18 +1267,6 @@ const layer = Layer.effect(
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
             ]
-            if (String(lastUser.model.providerID) === "semena" && semenaTask) {
-              system.push(semenaTaskContract(semenaTask))
-            }
-            if (String(lastUser.model.providerID) === "semena" && semenaForcedPhase) {
-              const phaseGuidance =
-                semenaForcedPhase === "external"
-                  ? "Current evidence target: obtain current external data. All user-authorized tools remain available. Use websearch, webfetch, or shell network requests as appropriate; local extraction and scripting needed to form lookup queries are allowed. Do not claim completion until the external evidence is captured."
-                  : semenaForcedPhase === "mutation"
-                    ? "Current evidence target: write the requested result. All user-authorized tools remain available. Use any inspection, scripting, or editing tools needed, but do not claim completion until the requested artifact has actually been created or updated."
-                    : "Current evidence target: verify the produced result independently. All user-authorized tools remain available. Re-read, test, or validate the artifact and correct any discrepancy before claiming completion."
-              system.push(phaseGuidance)
-            }
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
@@ -1528,12 +1282,7 @@ const layer = Layer.effect(
               ],
               tools,
               model,
-              toolChoice:
-                format.type === "json_schema"
-                  ? "required"
-                  : semenaForcedPhase && Object.keys(tools).length > 0
-                      ? "required"
-                      : undefined,
+              toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
 
             if (structured !== undefined) {
