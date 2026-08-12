@@ -17,6 +17,18 @@ const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+const STRUCTURED_DOCUMENT_EXTENSIONS = new Set([
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".xlsm",
+  ".ppt",
+  ".pptx",
+  ".odt",
+  ".ods",
+  ".odp",
+])
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -179,6 +191,8 @@ export const ReadTool = Tool.define<
       return { raw, count: flags.count, cut: flags.cut, more: flags.more, offset: opts.offset }
     })
 
+    const isStructuredDocument = (filepath: string) => STRUCTURED_DOCUMENT_EXTENSIONS.has(path.extname(filepath).toLowerCase())
+
     const isBinaryFile = (filepath: string, bytes: Uint8Array) => {
       const ext = path.extname(filepath).toLowerCase()
       switch (ext) {
@@ -321,6 +335,28 @@ export const ReadTool = Tool.define<
               url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
             },
           ],
+        }
+      }
+
+      if (isStructuredDocument(filepath)) {
+        const ext = path.extname(filepath).toLowerCase()
+        const output = [
+          `<path>${filepath}</path>`,
+          `<type>structured-document</type>`,
+          `<content>`,
+          `This is a ${ext} document, not a plain text file. The read tool cannot inspect spreadsheet, word processor, or presentation contents directly.`,
+          `Use the shell tool with an appropriate parser instead of calling read again. For Excel files, use Python/pandas, openpyxl for .xlsx, or xlrd/libreoffice conversion for legacy .xls, then write the requested output file.`,
+          `</content>`,
+        ].join("\n")
+
+        return {
+          title,
+          output,
+          metadata: {
+            preview: `${ext} structured document. Use shell with an appropriate parser.`,
+            truncated: false,
+            loaded: loaded.map((item) => item.filepath),
+          },
         }
       }
 

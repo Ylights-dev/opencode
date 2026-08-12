@@ -585,6 +585,18 @@ describe("tool.read loaded instructions", () => {
 })
 
 describe("tool.read binary detection", () => {
+  it.live("returns parser guidance for spreadsheet files instead of failing", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "report.xls"), Buffer.from([0xd0, 0xcf, 0x11, 0xe0]))
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "report.xls") })
+      expect(result.output).toContain("<type>structured-document</type>")
+      expect(result.output).toContain("Use the shell tool with an appropriate parser")
+      expect(result.metadata.preview).toContain(".xls structured document")
+    }),
+  )
+
   it.live("rejects text extension files with null bytes", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
