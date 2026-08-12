@@ -41,6 +41,7 @@ class ClientConfigTests(unittest.TestCase):
         self.assertEqual(permission["bash"], "allow")
         for tool in ["edit", "glob", "grep", "list", "task", "todowrite", "lsp", "skill", "webfetch", "websearch", "read", "write"]:
             self.assertEqual(permission[tool], "allow", tool)
+        self.assertNotIn("instructions", self.config)
 
 
 class DeploymentTests(unittest.TestCase):
@@ -96,7 +97,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertTrue(support.is_dir())
         self.assertFalse((root / "Install-SemenaAgent.cmd").exists())
         self.assertFalse((root / "Install-SemenaAgent.ps1").exists())
-        for name in ["Install-SemenaAgent.ps1", "agent-config.json", "AGENTS.md", "semena-agent-ca.crt"]:
+        for name in ["Install-SemenaAgent.ps1", "agent-config.json", "semena-agent-ca.crt"]:
             self.assertTrue((support / name).is_file(), name)
 
     def test_onefile_installer_bundle_exists(self) -> None:

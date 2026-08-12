@@ -37,6 +37,5 @@
     "skill": "allow",
     "read": "allow",
     "write": "allow"
-  },
-  "instructions": ["AGENTS.md"]
+  }
 }

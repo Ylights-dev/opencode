@@ -170,7 +170,7 @@ New-Item -ItemType Directory -Force -Path $runtimeRoot, $configRoot, $Workspace 
 $env:SEMENA_AGENT_API_KEY = $ApiKey
 
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'agent-config.json') -Destination (Join-Path $configRoot 'opencode.json') -Force
-Copy-Item -LiteralPath (Join-Path $sourceRoot 'AGENTS.md') -Destination (Join-Path $Workspace 'AGENTS.md') -Force
+Remove-Item -LiteralPath (Join-Path $Workspace 'AGENTS.md') -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath $certificateSource -Destination $certificateTarget -Force
 Install-AgentPython
 
