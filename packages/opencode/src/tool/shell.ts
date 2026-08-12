@@ -292,7 +292,12 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
 
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && Shell.ps(shell)) {
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+    const utf8Prefix = [
+      "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)",
+      "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+      "$OutputEncoding = [Console]::OutputEncoding",
+    ].join("; ")
+    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `${utf8Prefix}; ${command}`], {
       cwd,
       env,
       stdin: "ignore",

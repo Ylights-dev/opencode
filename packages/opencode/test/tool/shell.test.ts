@@ -217,6 +217,27 @@ describe("tool.shell", () => {
       )
     }),
   )
+
+  for (const item of ps) {
+    it.live(`preserves unicode filenames in PowerShell output [${item.label}]`, () =>
+      withShell(
+        item,
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          const filename = "Аэлита вес.txt"
+          yield* Effect.promise(() => Bun.write(path.join(tmp, filename), "ok"))
+          const result = yield* runIn(
+            tmp,
+            run({
+              command: 'Get-ChildItem -LiteralPath . -Filter "*.txt" | Select-Object -ExpandProperty Name',
+            }),
+          )
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain(filename)
+        }),
+      ),
+    )
+  }
 })
 
 describe("tool.shell permissions", () => {

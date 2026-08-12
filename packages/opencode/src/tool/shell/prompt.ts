@@ -55,6 +55,7 @@ function powershellNotes(name: string) {
 - Use \`cmd1; if ($?) { cmd2 }\` to chain dependent commands.
 - Use double quotes for interpolated strings (\`"Hello $name"\`), single quotes for verbatim strings.
 - Prefer full cmdlet names like \`Get-ChildItem\`, \`Set-Content\`, \`Remove-Item\`, and \`New-Item\` over aliases.
+- For file paths, especially paths with spaces or non-ASCII characters, use quoted \`-LiteralPath\` arguments instead of aliases such as \`ls\`.
 - Use \`$(...)\` for subexpressions. Use \`@(...)\` for array expressions.
 - To call a native executable whose path contains spaces, use the call operator: \`& "path/to/exe" args\`.
 - Escape special characters with the PowerShell backtick character.`
@@ -134,10 +135,12 @@ Before executing the command, please follow these steps:
    - For example, before creating \`foo${pathSep}bar\`, first use \`Test-Path -LiteralPath "foo"\` to check that \`foo\` exists and is the intended parent directory
 
 2. Command Execution:
-   - Always quote file paths that contain spaces with double quotes (e.g., Remove-Item -LiteralPath "path with spaces${pathSep}file.txt")
+   - Always quote file paths that contain spaces or non-ASCII characters with double quotes and prefer \`-LiteralPath\` (e.g., Remove-Item -LiteralPath "path with spaces${pathSep}file.txt")
    - Examples of proper quoting:
      - New-Item -ItemType Directory -Path "My Documents" (correct)
      - New-Item -ItemType Directory -Path My Documents (incorrect - path is split)
+     - Get-Item -LiteralPath "Аэлита вес.xls" (correct)
+     - ls Аэлита вес.xls (incorrect - path is split)
      - & "path with spaces${pathSep}script.ps1" (correct)
      - path with spaces${pathSep}script.ps1 (incorrect - path is split and not invoked)
    - After ensuring proper quoting, execute the command.
