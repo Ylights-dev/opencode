@@ -22,13 +22,35 @@ function tool(tool: string, input: Record<string, unknown>, output: string) {
   } as any
 }
 
+function shellWithExit(command: string, output: string, exit: number) {
+  return {
+    info: { time: { created: 10 } },
+    parts: [
+      {
+        type: "tool" as const,
+        tool: "shell",
+        state: {
+          status: "completed" as const,
+          input: { command },
+          output,
+          title: "",
+          metadata: { exit },
+          time: { start: 10, end: 11 },
+        },
+      },
+    ],
+  } as any
+}
+
 const none = {
   completedTools: 0,
+  usefulTools: 0,
   mutationTools: 0,
   externalTools: 0,
   failedTools: 0,
   verificationTools: 0,
   externalBeforeMutation: false,
+  repeatedFailureStreak: 0,
 }
 
 describe("semena durable task state", () => {
@@ -84,7 +106,7 @@ describe("semena evidence-based completion", () => {
     const task = updateSemenaTask(undefined, "\u0421\u043e\u0437\u0434\u0430\u0439 \u0444\u0430\u0439\u043b result.xlsx", 1)
     const result = assessSemenaCompletion({
       task,
-      evidence: { ...none, completedTools: 2, mutationTools: 1, verificationTools: 1 },
+      evidence: { ...none, completedTools: 2, usefulTools: 2, mutationTools: 1, verificationTools: 1 },
       assistantText: "\u0413\u043e\u0442\u043e\u0432\u043e: \u0444\u0430\u0439\u043b \u0441\u043e\u0437\u0434\u0430\u043d \u0438 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d.",
     })
 
@@ -119,11 +141,13 @@ describe("semena evidence-based completion", () => {
         task,
         evidence: {
           completedTools: 5,
+          usefulTools: 4,
           mutationTools: 1,
           externalTools: 2,
           failedTools: 1,
           verificationTools: 1,
           externalBeforeMutation: true,
+          repeatedFailureStreak: 0,
         },
         assistantText: "Готово: файл создан и проверен.",
         finish: "stop",
@@ -136,7 +160,7 @@ describe("semena evidence-based completion", () => {
     expect(
       assessSemenaCompletion({
         task,
-        evidence: { ...none, completedTools: 1 },
+        evidence: { ...none, completedTools: 1, usefulTools: 1 },
         assistantText: "Задача выполнена.",
         finish: "length",
       }).complete,
@@ -176,6 +200,23 @@ describe("semena evidence-based completion", () => {
     expect(collectSemenaTaskEvidence(messages, task)).toMatchObject({
       mutationTools: 0,
       externalTools: 0,
+      usefulTools: 0,
+      failedTools: 3,
+    })
+  })
+
+  test("tracks repeated failed command shapes instead of treating them as progress", () => {
+    const task = updateSemenaTask(undefined, "Update result.xlsx", 1)
+    const messages = [
+      shellWithExit("python -c \"for x in: pass\"", "SyntaxError: invalid syntax", 1),
+      shellWithExit("python -c \"for x in: pass\"", "SyntaxError: invalid syntax", 1),
+    ]
+
+    expect(collectSemenaTaskEvidence(messages, task)).toMatchObject({
+      completedTools: 2,
+      usefulTools: 0,
+      failedTools: 2,
+      repeatedFailureStreak: 2,
     })
   })
 
@@ -185,11 +226,13 @@ describe("semena evidence-based completion", () => {
         { mutation: true, external: true, localTool: true },
         {
           completedTools: 8,
+          usefulTools: 8,
           mutationTools: 1,
           externalTools: 2,
           failedTools: 0,
           verificationTools: 3,
           externalBeforeMutation: false,
+          repeatedFailureStreak: 0,
         },
       ),
     ).toBe("mutation")

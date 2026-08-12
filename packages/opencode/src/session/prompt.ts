@@ -1193,7 +1193,8 @@ const layer = Layer.effect(
             const evidence = yield* loadSemenaEvidence()
             const requirements = semenaTaskRequirements(semenaTask)
             const phase = semenaRequiredPhase(requirements, evidence!)
-            const toolCount = (evidence?.completedTools ?? 0) + (evidence?.failedTools ?? 0)
+            const toolCount = evidence?.usefulTools ?? 0
+            const repeatedFailure = (evidence?.repeatedFailureStreak ?? 0) >= 2
             if (semenaTask?.forcedPhase && phase !== semenaTask.forcedPhase) {
               semenaTask = { ...semenaTask, forcedPhase: undefined, forcedTool: undefined }
               session.metadata = { ...session.metadata, semena_task: semenaTask }
@@ -1204,7 +1205,7 @@ const layer = Layer.effect(
               toolCount >= SEMENA_PROGRESS_THRESHOLD && toolCount - semenaProgressToolCount >= SEMENA_PROGRESS_INTERVAL
             if (
               phase &&
-              (phaseChanged ? toolCount >= SEMENA_PROGRESS_THRESHOLD : stalled) &&
+              (repeatedFailure || (phaseChanged ? toolCount >= SEMENA_PROGRESS_THRESHOLD : stalled)) &&
               semenaProgressInterventions < 6
             ) {
               const repeatedForcedPhase = semenaTask.forcedPhase === phase
@@ -1214,20 +1215,25 @@ const layer = Layer.effect(
               semenaTask = {
                 ...semenaTask,
                 forcedPhase: phase,
-                forcedTool: phase === "external" ? "websearch" : undefined,
+                forcedTool: undefined,
               }
               session.metadata = { ...session.metadata, semena_task: semenaTask }
               yield* sessions.setMetadata({ sessionID, metadata: session.metadata })
               const instruction =
-                phase === "external"
-                  ? `${repeatedForcedPhase ? "The required external evidence is still missing. " : ""}Local inspection has repeated without the required external lookup. Consolidate what you know in a reusable script or bounded data file and obtain the required current web/network evidence now. You may keep using local tools to extract or prepare lookup inputs.`
+                (repeatedFailure
+                  ? `The last tool pattern is failing repeatedly (${evidence?.repeatedFailure ?? "same failure"}). Do not run that command shape again. `
+                  : "") +
+                (phase === "external"
+                  ? `${repeatedForcedPhase ? "The required external evidence is still missing. " : ""}Local inspection has not produced the required external lookup. Use websearch/webfetch when available, or a PowerShell network request, and capture current web evidence before writing the final result.`
                   : phase === "mutation"
                     ? "Required research has started, but no requested result has been written. Stop repeating inspection and create or update the requested artifact now, using a reusable script for bulk work."
-                    : "A result was changed but has not been independently verified. Use a separate read, test, or validation command now and fix any discrepancy."
+                    : "A result was changed but has not been independently verified. Use a separate read, test, or validation command now and fix any discrepancy.")
               yield* Effect.logWarning("semena progress watchdog intervention", {
                 "session.id": sessionID,
                 phase,
                 toolCount,
+                failedTools: evidence?.failedTools ?? 0,
+                repeatedFailureStreak: evidence?.repeatedFailureStreak ?? 0,
                 attempt: semenaProgressInterventions,
               })
               const progressMsg: SessionV1.User = {
@@ -1447,12 +1453,10 @@ const layer = Layer.effect(
             )
 
             const semenaForcedPhase = semenaTask?.forcedPhase
-            const semenaForcedTool = semenaTask?.forcedTool
             if (String(lastUser.model.providerID) === "semena" && semenaForcedPhase) {
               yield* Effect.logWarning("semena progress watchdog guided tools", {
                 "session.id": sessionID,
                 phase: semenaForcedPhase,
-                forcedTool: semenaForcedTool ?? "",
                 tools: Object.keys(tools).join(","),
               })
             }
@@ -1520,9 +1524,7 @@ const layer = Layer.effect(
               toolChoice:
                 format.type === "json_schema"
                   ? "required"
-                  : semenaForcedTool && tools[semenaForcedTool]
-                    ? { type: "tool", toolName: semenaForcedTool }
-                    : semenaForcedPhase && Object.keys(tools).length > 0
+                  : semenaForcedPhase && Object.keys(tools).length > 0
                       ? "required"
                       : undefined,
             })

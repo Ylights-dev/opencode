@@ -17,11 +17,14 @@ export interface SemenaTaskState {
 
 export interface SemenaTaskEvidence {
   completedTools: number
+  usefulTools: number
   mutationTools: number
   externalTools: number
   failedTools: number
   verificationTools: number
   externalBeforeMutation: boolean
+  repeatedFailureStreak: number
+  repeatedFailure?: string
 }
 
 export interface SemenaCompletionAssessment {
@@ -110,6 +113,8 @@ Execution rules:
 - Use tools for file, system, code, or current external-data work. Do not merely print a command or a plan.
 - A successful inspection, extracted list, draft, or intermediate script is not completion when the request also requires lookup, modification, export, execution, or verification.
 - After a tool error, correct the call and retry with a concrete action.
+- On Windows shell, use PowerShell-compatible commands. Use py -3 for Python when available, quote paths with spaces, and put complex Python into a script file before running it.
+- If a command shape fails twice, stop repeating that shape. Switch tools or write a smaller diagnostic script that prints one concrete fact.
 - Claim completion only after the requested result has been produced and verified with tools.
 </semena-task-contract>`
 }
@@ -146,8 +151,7 @@ function requestedArtifactExtensions(task: SemenaTaskState) {
 }
 
 function successfulMutation(part: SessionV1.ToolPart, task: SemenaTaskState) {
-  if (part.state.status !== "completed") return false
-  if (looksLikeFailedOutput(part.state.output)) return false
+  if (!successfulTool(part)) return false
   const expected = requestedArtifactExtensions(task)
   const input = JSON.stringify(part.state.input ?? {})
   const inputRecord = isRecord(part.state.input) ? part.state.input : {}
@@ -164,7 +168,7 @@ function successfulMutation(part: SessionV1.ToolPart, task: SemenaTaskState) {
     return patchTargets.some((line) => [...expected].some((extension) => line.toLowerCase().endsWith(extension)))
   }
   if (!["bash", "shell"].includes(part.tool)) return false
-  const shellEvidence = `${input}\n${part.state.output ?? ""}`.toLowerCase()
+  const shellEvidence = `${input}\n${toolOutput(part) ?? ""}`.toLowerCase()
   if (expected.size > 0 && ![...expected].some((extension) => shellEvidence.includes(extension))) return false
   return /(?:Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|New-Item|Remove-Item|save\s*\(|to_excel\s*\(|write_(?:text|bytes)\s*\(|writeFile|mkdir|rename|copyfile|shutil\.copy|>\s*[^=&])/i.test(
     input,
@@ -172,8 +176,7 @@ function successfulMutation(part: SessionV1.ToolPart, task: SemenaTaskState) {
 }
 
 function successfulExternalTool(part: SessionV1.ToolPart) {
-  if (part.state.status !== "completed") return false
-  if (looksLikeFailedOutput(part.state.output)) return false
+  if (!successfulTool(part)) return false
   if (["websearch", "webfetch"].includes(part.tool)) return true
   if (!["bash", "shell"].includes(part.tool)) return false
   return /(?:Invoke-WebRequest|Invoke-RestMethod|curl(?:\.exe)?\s|wget\s|https?:\/\/)/i.test(
@@ -181,33 +184,100 @@ function successfulExternalTool(part: SessionV1.ToolPart) {
   )
 }
 
-function looksLikeFailedOutput(output: string | undefined) {
+function toolOutput(part: SessionV1.ToolPart) {
+  return "output" in part.state && typeof part.state.output === "string" ? part.state.output : undefined
+}
+
+function toolExitCode(part: SessionV1.ToolPart) {
+  const state = part.state
+  const metadata = "metadata" in state && isRecord(state.metadata) ? state.metadata : {}
+  const raw = metadata.exit ?? metadata.exitCode ?? metadata.exit_code
+  return typeof raw === "number" ? raw : undefined
+}
+
+export function looksLikeFailedOutput(output: string | undefined) {
   if (!output) return false
   return /(?:Traceback \(most recent call last\):|SyntaxError:|ParserError:|CommandNotFoundException|is not recognized as an internal or external command|Invoke-WebRequest:\s.*(?:failed|error)|curl:\s*\(\d+\)|(?:^|\n)\s*(?:Error(?: reading file)?|Failed):|\bInvalid argument:|\b(?:fatal error|uncaught exception)\b)/i.test(
     output,
   )
 }
 
+function successfulTool(part: SessionV1.ToolPart) {
+  if (part.state.status !== "completed") return false
+  const exit = toolExitCode(part)
+  if (exit !== undefined && exit !== 0) return false
+  if (looksLikeFailedOutput(toolOutput(part))) return false
+  return true
+}
+
+function failedTool(part: SessionV1.ToolPart) {
+  if (part.state.status === "error") return true
+  if (part.state.status !== "completed") return false
+  const exit = toolExitCode(part)
+  return (exit !== undefined && exit !== 0) || looksLikeFailedOutput(toolOutput(part))
+}
+
+function normalizeCommand(value: string) {
+  return value
+    .replace(/[A-Z]:\\Users\\[^"'\s]+/gi, "%USERPROFILE%")
+    .replace(/0x[0-9a-f]+/gi, "0x#")
+    .replace(/\b\d{2,}\b/g, "#")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220)
+}
+
+export function semenaToolFailureFingerprint(part: SessionV1.ToolPart) {
+  if (!failedTool(part)) return
+  const input = isRecord(part.state.input) ? part.state.input : {}
+  const command = typeof input.command === "string" ? input.command : JSON.stringify(part.state.input ?? {})
+  const output = toolOutput(part) ?? ""
+  const signature =
+    output.match(
+      /(Traceback \(most recent call last\):|SyntaxError:[^\n]*|ParserError[^\n]*|CommandNotFoundException|is not recognized as an internal or external command|Invalid argument:[^\n]*|curl:\s*\(\d+\)[^\n]*)/i,
+    )?.[0] ?? output.split(/\r?\n/).find((line: string) => line.trim()) ?? part.state.status
+  return `${part.tool}:${normalizeCommand(command)}:${normalizeCommand(signature)}`
+}
+
 export function collectSemenaTaskEvidence(messages: SessionV1.WithParts[], task: SemenaTaskState): SemenaTaskEvidence {
   const evidence: SemenaTaskEvidence = {
     completedTools: 0,
+    usefulTools: 0,
     mutationTools: 0,
     externalTools: 0,
     failedTools: 0,
     verificationTools: 0,
     externalBeforeMutation: false,
+    repeatedFailureStreak: 0,
   }
   let sawExternal = false
   let sawMutation = false
+  let lastFailure: string | undefined
+  let lastFailureStreak = 0
   for (const message of messages) {
     if (message.info.time.created < task.startedAt) continue
     for (const part of message.parts) {
       if (part.type !== "tool") continue
       const completed = part.state.status === "completed"
+      const successful = successfulTool(part)
+      const failed = failedTool(part)
       const mutation = successfulMutation(part, task)
       const external = successfulExternalTool(part)
       if (completed) evidence.completedTools++
-      if (part.state.status === "error") evidence.failedTools++
+      if (successful) evidence.usefulTools++
+      if (failed) evidence.failedTools++
+      const failure = semenaToolFailureFingerprint(part)
+      if (failure) {
+        lastFailureStreak = failure === lastFailure ? lastFailureStreak + 1 : 1
+        lastFailure = failure
+        if (lastFailureStreak > evidence.repeatedFailureStreak) {
+          evidence.repeatedFailureStreak = lastFailureStreak
+          evidence.repeatedFailure = failure
+        }
+      } else if (successful) {
+        lastFailure = undefined
+        lastFailureStreak = 0
+      }
       if (external) {
         evidence.externalTools++
         sawExternal = true
@@ -219,7 +289,7 @@ export function collectSemenaTaskEvidence(messages: SessionV1.WithParts[], task:
         sawMutation = true
         continue
       }
-      if (completed && sawMutation) evidence.verificationTools++
+      if (successful && sawMutation) evidence.verificationTools++
     }
   }
   return evidence
@@ -257,7 +327,7 @@ export function assessSemenaCompletion(input: {
   if (needsMutation && input.evidence.verificationTools === 0) {
     return { complete: false, reason: "the changed result has not been verified with a separate tool call" }
   }
-  if (input.evidence.completedTools === 0) {
+  if (input.evidence.usefulTools === 0) {
     return { complete: false, reason: "the request requires tool work, but no tool completed successfully" }
   }
   return { complete: true, reason: "the completion claim has matching tool evidence" }

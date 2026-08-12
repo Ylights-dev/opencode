@@ -86,6 +86,33 @@ const serialize = (message: SessionV1.WithParts) => {
     .join("\n")
 }
 
+function deterministicCompactionSummary(input: {
+  task?: ReturnType<typeof readSemenaTask>
+  previousSummary?: string
+  tail: SessionV1.WithParts[]
+}) {
+  const task = input.task
+  const original = task ? `Original employee request:\n${task.root}` : "Original employee request: not recorded."
+  const updates = task?.updates.length ? `Later instructions:\n${task.updates.map((item, i) => `${i + 1}. ${item}`).join("\n")}` : ""
+  const prior = input.previousSummary ? `Previous summary:\n${truncate(input.previousSummary)}` : ""
+  const recent = input.tail.map(serialize).filter(Boolean).slice(-8).join("\n\n")
+  return [
+    "Objective",
+    original,
+    updates,
+    prior,
+    "Work State",
+    "Completed: preserved from prior conversation and recent tool messages below. Do not treat this compaction as task completion.",
+    "Active: continue the original employee request until every requested operation is produced and verified with tools.",
+    "Blocked: none recorded by compaction fallback.",
+    "Next Move",
+    "Use the next concrete tool call for the unfinished requirement. If the last command failed, change approach before retrying.",
+    recent ? `Recent Messages:\n${truncate(recent)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+}
+
 function summaryText(message: SessionV1.WithParts) {
   const text = message.parts
     .filter((part): part is SessionV1.TextPart => part.type === "text")
@@ -383,8 +410,12 @@ const layer = Layer.effect(
         { context: [], prompt: undefined },
       )
       let nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      const semenaTask =
+        String(userMessage.model.providerID) === "semena"
+          ? readSemenaTask((yield* session.get(input.sessionID).pipe(Effect.orDie)).metadata)
+          : undefined
       if (String(userMessage.model.providerID) === "semena") {
-        const task = readSemenaTask((yield* session.get(input.sessionID).pipe(Effect.orDie)).metadata)
+        const task = semenaTask
         if (task) {
           nextPrompt = `${semenaTaskContract(task)}
 
@@ -429,27 +460,59 @@ ${nextPrompt}`
         sessionID: input.sessionID,
         model,
       })
-      const result = yield* processor.process({
-        user: userMessage,
-        agent,
-        sessionID: input.sessionID,
-        tools: {},
-        system: [],
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
+      const result = yield* processor
+        .process({
+          user: userMessage,
+          agent,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: [nextPrompt, "The following is the conversation history:", conversation]
+                    .filter(Boolean)
+                    .join("\n\n"),
+                },
+              ],
+            },
+          ],
+          model,
+        })
+        .pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              const message = String(error)
+              if (!/Tool call not allowed while generating summary/i.test(message)) return yield* Effect.fail(error)
+              yield* Effect.logWarning("compaction summary fallback after disallowed tool call", {
+                "session.id": input.sessionID,
+                error: message,
+              })
+              yield* session.updatePart({
+                id: PartID.ascending(),
+                messageID: msg.id,
+                sessionID: input.sessionID,
                 type: "text",
-                text: [nextPrompt, "The following is the conversation history:", conversation]
-                  .filter(Boolean)
-                  .join("\n\n"),
-              },
-            ],
-          },
-        ],
-        model,
-      })
+                text: deterministicCompactionSummary({
+                  task: semenaTask,
+                  previousSummary,
+                  tail: history.slice(-12),
+                }),
+                time: {
+                  start: Date.now(),
+                  end: Date.now(),
+                },
+              } satisfies SessionV1.TextPart)
+              processor.message.finish = "stop"
+              processor.message.time.completed = Date.now()
+              yield* session.updateMessage(processor.message)
+              return "continue" as const
+            }),
+          ),
+        )
 
       if (result === "compact") {
         processor.message.error = new SessionV1.ContextOverflowError({
