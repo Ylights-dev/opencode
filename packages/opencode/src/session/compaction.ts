@@ -460,6 +460,32 @@ ${nextPrompt}`
         sessionID: input.sessionID,
         model,
       })
+      const useFallbackSummary = Effect.fnUntraced(function* (message: string) {
+        yield* Effect.logWarning("compaction summary fallback after disallowed tool call", {
+          "session.id": input.sessionID,
+          error: message,
+        })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          text: deterministicCompactionSummary({
+            task: semenaTask,
+            previousSummary,
+            tail: history.slice(-12),
+          }),
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        } satisfies SessionV1.TextPart)
+        processor.message.error = undefined
+        processor.message.finish = "stop"
+        processor.message.time.completed = Date.now()
+        yield* session.updateMessage(processor.message)
+        return "continue" as const
+      })
       const result = yield* processor
         .process({
           user: userMessage,
@@ -487,32 +513,15 @@ ${nextPrompt}`
             Effect.gen(function* () {
               const message = String(error)
               if (!/Tool call not allowed while generating summary/i.test(message)) return yield* Effect.fail(error)
-              yield* Effect.logWarning("compaction summary fallback after disallowed tool call", {
-                "session.id": input.sessionID,
-                error: message,
-              })
-              yield* session.updatePart({
-                id: PartID.ascending(),
-                messageID: msg.id,
-                sessionID: input.sessionID,
-                type: "text",
-                text: deterministicCompactionSummary({
-                  task: semenaTask,
-                  previousSummary,
-                  tail: history.slice(-12),
-                }),
-                time: {
-                  start: Date.now(),
-                  end: Date.now(),
-                },
-              } satisfies SessionV1.TextPart)
-              processor.message.finish = "stop"
-              processor.message.time.completed = Date.now()
-              yield* session.updateMessage(processor.message)
-              return "continue" as const
+              return yield* useFallbackSummary(message)
             }),
           ),
         )
+
+      const processorError = processor.message.error ? JSON.stringify(processor.message.error) : ""
+      if (/Tool call not allowed while generating summary/i.test(processorError)) {
+        return yield* useFallbackSummary(processorError)
+      }
 
       if (result === "compact") {
         processor.message.error = new SessionV1.ContextOverflowError({

@@ -88,13 +88,36 @@ export function updateSemenaTask(
   createdAt: number,
 ): SemenaTaskState {
   const text = clip(request, current ? MAX_UPDATE_CHARS : MAX_ROOT_CHARS)
-  if (!current || current.completedAt) return { root: clip(request, MAX_ROOT_CHARS), updates: [], startedAt: createdAt }
+  if (!current || current.completedAt || shouldStartFreshSemenaTask(current, request))
+    return { root: clip(request, MAX_ROOT_CHARS), updates: [], startedAt: createdAt }
   if (!text || text === current.root || current.updates.at(-1) === text) return current
   return { ...current, updates: [...current.updates, text].slice(-MAX_UPDATES) }
 }
 
 export function semenaTaskText(task: SemenaTaskState) {
   return [task.root, ...task.updates].filter(Boolean).join("\n\nAdditional user instruction:\n")
+}
+
+function semenaTextRequirements(text: string): SemenaTaskRequirements {
+  return {
+    mutation: FILE_MUTATION_INTENT.test(text),
+    external: EXTERNAL_RESEARCH_INTENT.test(text),
+    localTool: LOCAL_TOOL_INTENT.test(text),
+  }
+}
+
+export function shouldStartFreshSemenaTask(current: SemenaTaskState, request: string) {
+  const text = request.trim()
+  if (!text) return false
+  if (/(?:^|\s)(?:new task|start over|ignore previous task|новая задача|забудь прошл|начни заново|сначала заново)(?:\s|$|[.:,!])/i.test(text)) {
+    return true
+  }
+  const currentRequirements = semenaTaskRequirements(current)
+  const requestRequirements = semenaTextRequirements(text)
+  if (currentRequirements.external && !requestRequirements.external && (requestRequirements.mutation || requestRequirements.localTool)) {
+    return true
+  }
+  return false
 }
 
 export function semenaTaskContract(task: SemenaTaskState) {
@@ -134,12 +157,7 @@ const DONE_SIGNAL =
   /(^|\s)(\u0433\u043e\u0442\u043e\u0432\u043e|\u0437\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430|\u0440\u0430\u0431\u043e\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430|\u0444\u0430\u0439\u043b (\u0441\u043e\u0437\u0434\u0430\u043d|\u0441\u043e\u0445\u0440\u0430\u043d[\u0435\u0451]\u043d|\u043e\u0431\u043d\u043e\u0432\u043b[\u0435\u0451]\u043d|\u0437\u0430\u043f\u0438\u0441\u0430\u043d)|\u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0430\u043d\u043e \d+|done|task completed|file (created|saved|updated)|final result|successfully)(\s|:|\.|,|$)/i
 
 export function semenaTaskRequirements(task: SemenaTaskState): SemenaTaskRequirements {
-  const text = semenaTaskText(task)
-  return {
-    mutation: FILE_MUTATION_INTENT.test(text),
-    external: EXTERNAL_RESEARCH_INTENT.test(text),
-    localTool: LOCAL_TOOL_INTENT.test(text),
-  }
+  return semenaTextRequirements(semenaTaskText(task))
 }
 
 function requestedArtifactExtensions(task: SemenaTaskState) {

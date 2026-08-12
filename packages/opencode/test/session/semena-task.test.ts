@@ -6,6 +6,7 @@ import {
   semenaRequiredPhase,
   semenaTaskContract,
   semenaTaskRequirements,
+  shouldStartFreshSemenaTask,
   updateSemenaTask,
 } from "../../src/session/semena-task"
 
@@ -88,6 +89,23 @@ describe("semena durable task state", () => {
     const next = updateSemenaTask(completed, "Проверь новый проект", 30)
 
     expect(next).toEqual({ root: "Проверь новый проект", updates: [], startedAt: 30 })
+  })
+
+  test("starts a fresh task when a new local file job replaces an unfinished external job", () => {
+    const previous = updateSemenaTask(
+      undefined,
+      "\u041f\u0440\u043e\u0432\u0435\u0440\u044c \u0444\u0430\u0439\u043b \u0410\u044d\u043b\u0438\u0442\u0430 \u0432\u0435\u0441.xls \u043f\u043e \u0440\u0435\u0435\u0441\u0442\u0440\u0443 \u0438 \u0432\u043f\u0438\u0448\u0438 \u0433\u043e\u0434",
+      10,
+    )
+    const request =
+      "\u0432 \u0444\u0430\u0439\u043b\u0435 \u0410\u044d\u043b\u0438\u0442\u0430 \u0432\u0435\u0441.xls \u0432\u043e\u0437\u044c\u043c\u0438 \u043a\u0443\u043b\u044c\u0442\u0443\u0440\u0443 \u0438 \u0440\u0430\u0441\u0442\u0435\u043d\u0438\u0435 \u0438 \u043f\u043e\u043b\u043e\u0436\u0438 \u0432 \u043d\u043e\u0432\u044b\u0439 excel \u0444\u0430\u0439\u043b"
+
+    expect(shouldStartFreshSemenaTask(previous, request)).toBeTrue()
+    const next = updateSemenaTask(previous, request, 20)
+
+    expect(next.root).toBe(request)
+    expect(next.updates).toEqual([])
+    expect(semenaTaskRequirements(next).external).toBeFalse()
   })
 })
 
