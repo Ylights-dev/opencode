@@ -585,15 +585,27 @@ describe("tool.read loaded instructions", () => {
 })
 
 describe("tool.read binary detection", () => {
-  it.live("returns parser guidance for spreadsheet files instead of failing", () =>
+  it.live("returns spreadsheet preview or guidance instead of failing", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "report.xls"), Buffer.from([0xd0, 0xcf, 0x11, 0xe0]))
 
       const result = yield* exec(dir, { filePath: path.join(dir, "report.xls") })
+      expect(result.output).toContain("<type>spreadsheet</type>")
+      expect(result.output).toContain("To transform or write spreadsheet data")
+      expect(["Spreadsheet preview loaded", "Spreadsheet preview unavailable"]).toContain(result.metadata.preview)
+    }),
+  )
+
+  it.live("returns parser guidance for word processor files instead of failing", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "report.docx"), Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "report.docx") })
       expect(result.output).toContain("<type>structured-document</type>")
       expect(result.output).toContain("Use the shell tool with an appropriate parser")
-      expect(result.metadata.preview).toContain(".xls structured document")
+      expect(result.metadata.preview).toContain(".docx structured document")
     }),
   )
 

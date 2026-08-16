@@ -29,6 +29,7 @@ const STRUCTURED_DOCUMENT_EXTENSIONS = new Set([
   ".ods",
   ".odp",
 ])
+const SPREADSHEET_EXTENSIONS = new Set([".xls", ".xlsx", ".xlsm"])
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -192,6 +193,127 @@ export const ReadTool = Tool.define<
     })
 
     const isStructuredDocument = (filepath: string) => STRUCTURED_DOCUMENT_EXTENSIONS.has(path.extname(filepath).toLowerCase())
+    const isSpreadsheet = (filepath: string) => SPREADSHEET_EXTENSIONS.has(path.extname(filepath).toLowerCase())
+
+    const inspectSpreadsheet = Effect.fn("ReadTool.inspectSpreadsheet")(function* (filepath: string) {
+      const script = String.raw`
+import json
+import math
+import os
+import sys
+
+filepath = sys.argv[1]
+ext = os.path.splitext(filepath)[1].lower()
+limit_rows = 25
+limit_cols = 20
+
+def clean(value):
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        if math.isnan(value):
+            return ""
+        if value.is_integer():
+            return int(value)
+    return str(value)
+
+sheets = []
+if ext == ".xls":
+    import xlrd
+    book = xlrd.open_workbook(filepath)
+    for sheet in book.sheets()[:5]:
+        preview = []
+        for row_idx in range(min(sheet.nrows, limit_rows)):
+            preview.append([clean(sheet.cell_value(row_idx, col_idx)) for col_idx in range(min(sheet.ncols, limit_cols))])
+        sheets.append({"name": sheet.name, "rows": sheet.nrows, "columns": sheet.ncols, "preview": preview})
+else:
+    import openpyxl
+    book = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+    for sheet in book.worksheets[:5]:
+        preview = []
+        max_row = sheet.max_row or 0
+        max_col = sheet.max_column or 0
+        for row in sheet.iter_rows(min_row=1, max_row=min(max_row, limit_rows), max_col=min(max_col, limit_cols), values_only=True):
+            preview.append([clean(value) for value in row])
+        sheets.append({"name": sheet.title, "rows": max_row, "columns": max_col, "preview": preview})
+
+print(json.dumps({"sheets": sheets}, ensure_ascii=False))
+`
+      const commands = process.platform === "win32" ? [["py", "-3"], ["python"]] : [["python3"], ["python"]]
+
+      for (const command of commands) {
+        const result = yield* Effect.tryPromise({
+          try: async () => {
+            const proc = Bun.spawn([...command, "-c", script, filepath], {
+              env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+              stdout: "pipe",
+              stderr: "pipe",
+            })
+            const [stdout, stderr, code] = await Promise.all([
+              new Response(proc.stdout).text(),
+              new Response(proc.stderr).text(),
+              proc.exited,
+            ])
+            return { stdout, stderr, code, command: command.join(" ") }
+          },
+          catch: (error) => (error instanceof Error ? error.message : String(error)),
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.succeed({
+              stdout: "",
+              stderr: error,
+              code: 1,
+              command: command.join(" "),
+            }),
+          ),
+        )
+
+        if (result.code === 0 && result.stdout.trim()) {
+          return { ok: true as const, text: result.stdout.trim() }
+        }
+      }
+
+      return { ok: false as const, text: "Python spreadsheet parser is unavailable or could not open this file." }
+    })
+
+    const spreadsheetOutput = (
+      filepath: string,
+      inspection: { ok: true; text: string } | { ok: false; text: string },
+    ) => {
+      const ext = path.extname(filepath).toLowerCase()
+      const content: string[] = [`<path>${filepath}</path>`, `<type>spreadsheet</type>`, `<content>`]
+
+      if (inspection.ok) {
+        try {
+          const parsed = JSON.parse(inspection.text) as {
+            sheets?: Array<{ name?: string; rows?: number; columns?: number; preview?: unknown[][] }>
+          }
+          const sheets = parsed.sheets ?? []
+          if (sheets.length === 0) content.push("No sheets were found.")
+          for (const sheet of sheets) {
+            content.push(`Sheet: ${sheet.name ?? "(unnamed)"}`)
+            content.push(`Rows: ${sheet.rows ?? 0}`)
+            content.push(`Columns: ${sheet.columns ?? 0}`)
+            content.push("Preview:")
+            for (const [index, row] of (sheet.preview ?? []).entries()) {
+              content.push(`${index + 1}: ${JSON.stringify(row)}`)
+            }
+            content.push("")
+          }
+        } catch {
+          content.push(inspection.text)
+        }
+      } else {
+        content.push(`Spreadsheet preview unavailable for this ${ext} file.`)
+        content.push(inspection.text)
+      }
+
+      content.push(
+        "This is only a preview. To transform or write spreadsheet data, use shell with Python and quote paths with -LiteralPath or normal string arguments.",
+      )
+      content.push(`</content>`)
+      return content.join("\n")
+    }
 
     const isBinaryFile = (filepath: string, bytes: Uint8Array) => {
       const ext = path.extname(filepath).toLowerCase()
@@ -338,14 +460,29 @@ export const ReadTool = Tool.define<
         }
       }
 
+      if (isSpreadsheet(filepath)) {
+        const inspection = yield* inspectSpreadsheet(filepath)
+        const output = spreadsheetOutput(filepath, inspection)
+
+        return {
+          title,
+          output,
+          metadata: {
+            preview: inspection.ok ? "Spreadsheet preview loaded" : "Spreadsheet preview unavailable",
+            truncated: false,
+            loaded: loaded.map((item) => item.filepath),
+          },
+        }
+      }
+
       if (isStructuredDocument(filepath)) {
         const ext = path.extname(filepath).toLowerCase()
         const output = [
           `<path>${filepath}</path>`,
           `<type>structured-document</type>`,
           `<content>`,
-          `This is a ${ext} document, not a plain text file. The read tool cannot inspect spreadsheet, word processor, or presentation contents directly.`,
-          `Use the shell tool with an appropriate parser instead of calling read again. For Excel files, use Python/pandas, openpyxl for .xlsx, or xlrd/libreoffice conversion for legacy .xls, then write the requested output file.`,
+          `This is a ${ext} document, not a plain text file. The read tool cannot inspect word processor or presentation contents directly.`,
+          `Use the shell tool with an appropriate parser or converter instead of calling read again.`,
           `</content>`,
         ].join("\n")
 
