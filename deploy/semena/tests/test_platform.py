@@ -62,15 +62,19 @@ class DeploymentTests(unittest.TestCase):
             self.assertIsNone(secret.search(path.read_text(encoding="utf-8")), path)
 
     def test_installer_pins_version_and_checksum(self) -> None:
-        installer = (ROOT / "client" / "Служебные файлы" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
-        self.assertRegex(installer, r"\$expectedHash = '[A-F0-9]{64}'")
+        installer = (ROOT / "client" / "onefile" / "Install-SemenaAgentEmbedded.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("__SEMENA_DESKTOP_SETUP_SHA256__", installer)
         self.assertIn("Get-FileHash", installer)
         self.assertIn("Import-Certificate", installer)
-        self.assertIn("/downloads/Semena-Agent-Setup-x64.exe", installer)
+        self.assertIn("Semena-Agent-Setup-x64.exe", installer)
         self.assertNotIn("github.com", installer)
 
     def test_installer_uses_open_webui_login_and_pins_ca_for_runtime(self) -> None:
-        installer = (ROOT / "client" / "Служебные файлы" / "Install-SemenaAgent.ps1").read_text(encoding="utf-8-sig")
+        installer = (ROOT / "client" / "onefile" / "Install-SemenaAgentEmbedded.ps1").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("Введите e-mail от корпоративной веб-панели", installer)
         self.assertIn("Введите пароль от корпоративной веб-панели", installer)
         self.assertIn("$ProgressPreference = 'SilentlyContinue'", installer)
@@ -80,24 +84,14 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("SEMENA_AGENT_API_KEY", installer)
         self.assertIn("автоматически привязано", installer)
 
-    def test_double_click_installer_wrapper_exists(self) -> None:
-        wrapper = (ROOT / "client" / "Установить Семена - Агент.cmd").read_text(encoding="utf-8-sig")
-        self.assertIn("ExecutionPolicy Bypass", wrapper)
-        self.assertIn("Install-SemenaAgent.ps1", wrapper)
-        self.assertIn("Please extract the ZIP archive completely", wrapper)
-        self.assertNotIn("Installation completed", wrapper)
-        self.assertNotIn("Installation failed", wrapper)
-        self.assertIn("pause", wrapper)
-
-    def test_client_bundle_has_single_human_entrypoint(self) -> None:
+    def test_client_support_directory_only_contains_embedded_data(self) -> None:
         root = ROOT / "client"
         support = root / "Служебные файлы"
-        self.assertTrue((root / "Установить Семена - Агент.cmd").is_file())
-        self.assertTrue((root / "Прочти меня - установка.txt").is_file())
         self.assertTrue(support.is_dir())
-        self.assertFalse((root / "Install-SemenaAgent.cmd").exists())
-        self.assertFalse((root / "Install-SemenaAgent.ps1").exists())
-        for name in ["Install-SemenaAgent.ps1", "agent-config.json", "semena-agent-ca.crt"]:
+        self.assertFalse((root / "Установить Семена - Агент.cmd").exists())
+        self.assertFalse((root / "Прочти меня - установка.txt").exists())
+        self.assertFalse((support / "Install-SemenaAgent.ps1").exists())
+        for name in ["AGENTS.md", "agent-config.json", "semena-agent-ca.crt"]:
             self.assertTrue((support / name).is_file(), name)
 
     def test_onefile_installer_bundle_exists(self) -> None:
@@ -105,7 +99,7 @@ class DeploymentTests(unittest.TestCase):
         builder = (root / "Build-SemenaAgentSetup.ps1").read_text(encoding="utf-8")
         embedded = (root / "Install-SemenaAgentEmbedded.ps1").read_text(encoding="utf-8")
         self.assertIn("makensis.exe", builder)
-        self.assertIn("SemenaAgentSetup.exe", builder)
+        self.assertIn("Semena-Agent-Setup-x64.exe", builder)
         self.assertIn("Semena-Agent-Setup-x64.exe", builder)
         self.assertIn("python-3.13.13-amd64.exe", builder)
         self.assertIn("python-wheels", builder)

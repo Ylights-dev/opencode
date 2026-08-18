@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$OutputPath = 'C:\docker-projects\semena-agent\static\downloads\SemenaAgentSetup.exe'
+    [string]$OutputPath = 'C:\docker-projects\semena-agent\static\downloads\Semena-Agent-Setup-x64.exe'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,7 +11,8 @@ $clientRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $supportRoot = Get-ChildItem -LiteralPath $clientRoot -Directory |
     Where-Object {
         (Test-Path -LiteralPath (Join-Path $_.FullName 'agent-config.json')) -and
-        (Test-Path -LiteralPath (Join-Path $_.FullName 'Install-SemenaAgent.ps1'))
+        (Test-Path -LiteralPath (Join-Path $_.FullName 'AGENTS.md')) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName 'semena-agent-ca.crt'))
     } |
     Select-Object -First 1 -ExpandProperty FullName
 if (-not $supportRoot) {
