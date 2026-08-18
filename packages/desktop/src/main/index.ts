@@ -123,6 +123,8 @@ const main = Effect.gen(function* () {
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
   const runtimeRoot = join(process.env.LOCALAPPDATA ?? app.getPath("appData"), "Семена - Агент")
+  const caRoot = join(process.env.LOCALAPPDATA ?? app.getPath("appData"), "Semena-Agent")
+  process.env.NODE_EXTRA_CA_CERTS = process.env.NODE_EXTRA_CA_CERTS ?? join(caRoot, "semena-agent-ca.crt")
   process.env.XDG_CONFIG_HOME = join(runtimeRoot, "config")
   process.env.XDG_DATA_HOME = join(runtimeRoot, "data")
   process.env.XDG_CACHE_HOME = join(runtimeRoot, "cache")

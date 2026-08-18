@@ -760,6 +760,116 @@ describe("ProviderTransform.options - gateway", () => {
   })
 })
 
+describe("ProviderTransform.options - semena local model", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (providerID: string, npm: string) =>
+    ({
+      id: `${providerID}/model`,
+      providerID,
+      api: {
+        id: "model",
+        url: "https://semena.local/v1",
+        npm,
+      },
+      name: "Model",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      limit: {
+        context: 32_768,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("disables Ollama thinking for Semena OpenAI-compatible provider", () => {
+    const result = ProviderTransform.options({
+      model: createModel("semena", "@ai-sdk/openai-compatible"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.reasoningEffort).toBe("none")
+    expect(result.think).toBe(false)
+  })
+
+  test("does not apply Semena thinking flag to other OpenAI-compatible providers", () => {
+    const result = ProviderTransform.options({
+      model: createModel("custom", "@ai-sdk/openai-compatible"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.think).toBeUndefined()
+  })
+
+  test("keeps Semena requests on the core OpenCode tool set", async () => {
+    const result = await Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: "semena", modelID: "semena-gemma4" },
+        } as any,
+        sessionID,
+        model: createModel("semena", "@ai-sdk/openai-compatible"),
+        agent: {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [],
+        } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {
+          read: {
+            description: "Read a file",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+          bash: {
+            description: "Run a shell command",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+          "1c-assistant_bitrix_get_tasks": {
+            description: "External MCP tool",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+          "video-tools_get_video_info": {
+            description: "External MCP tool",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+        },
+        provider: { id: "semena", options: {} } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+    expect(Object.keys(result.tools).sort()).toEqual(["bash", "read"])
+  })
+})
+
 describe("ProviderTransform.providerOptions", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({

@@ -46,6 +46,7 @@ export function preferAppEnv(userDataPath: string) {
   const shellEnv = shell ? loadShellEnv(shell, getLogger()) : null
   Object.assign(process.env, {
     ...shellEnv,
+    OPENCODE_PURE: process.env.OPENCODE_PURE ?? "1",
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",

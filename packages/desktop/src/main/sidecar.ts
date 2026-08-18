@@ -83,9 +83,15 @@ async function stop() {
 
 function prepareSidecarEnv(password: string, userDataPath: string) {
   preferBundledPython()
+  const localAppData = process.env.LOCALAPPDATA
+  const caRoot = localAppData ? join(localAppData, "Semena-Agent") : undefined
   Object.assign(process.env, {
     OPENCODE_SERVER_USERNAME: "opencode",
     OPENCODE_SERVER_PASSWORD: password,
+    OPENCODE_PURE: process.env.OPENCODE_PURE ?? "1",
+    ...(caRoot && {
+      NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS ?? join(caRoot, "semena-agent-ca.crt"),
+    }),
     OPENCODE_ENABLE_PARALLEL: process.env.OPENCODE_ENABLE_PARALLEL ?? "1",
     OPENCODE_WEBSEARCH_PROVIDER: process.env.OPENCODE_WEBSEARCH_PROVIDER ?? "parallel",
     OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS:

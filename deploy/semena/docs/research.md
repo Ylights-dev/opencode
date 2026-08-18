@@ -82,6 +82,40 @@ employee sessions.
 Do not deploy OpenClaw in the employee request path. Do not expose Ollama port
 11434 to employee workstations.
 
+## DeepSeek Harness follow-up
+
+Follow-up assessment date: 2026-08-18.
+
+The name "DeepSeek Harness" currently refers to multiple unrelated projects.
+The protocol adapter at `HenryZ838978/deepseek-harness` primarily preserves
+DeepSeek V4 `reasoning_content`, streaming tool-call indexes, and cache behavior;
+it is not a replacement desktop coding agent. Those protocol corrections do not
+improve the Gemma-based `semena-gemma4` model.
+
+The former `morlay/deepseek-harness` project now points to `morlay/playpen`. Its
+agent loop has useful ideas: a compact tool set, up to 200 tool turns, orphaned
+tool-call recovery, profiles, and an OpenAI-compatible endpoint. It is not yet a
+drop-in corporate Windows replacement: the current source has no Windows release,
+expects a Rust/MSVC build environment, uses Unix-oriented configuration path
+fallbacks, and documents its OS sandbox primarily for macOS.
+
+The official `deepseek-ai/awesome-deepseek-agent` repository is a catalog of
+integrations, not an official standalone DeepSeek Harness. It lists OpenCode
+alongside Pi, DeepSeek-TUI/CodeWhale, Reasonix, and other clients.
+
+CodeWhale (formerly DeepSeek-TUI) is the most credible future comparison because
+it provides Windows binaries, a Windows sandbox, session recovery, an HTTP
+runtime, local OpenAI-compatible providers, and recursive large-input tooling.
+It remains optimized for DeepSeek V4. Its DeepSeek-specific advantages do not
+automatically transfer to a local Gemma 12B model.
+
+Decision: keep the Semena OpenCode fork as the production harness. The useful
+harness properties identified during this review--a small provider-scoped tool
+set, disabled hidden reasoning, durable sessions, and explicit verification--are
+already present in the current fork. Consider CodeWhale only as an isolated A/B
+benchmark candidate, using the same Semena model, gateway, workspace, prompts,
+and pass/fail criteria.
+
 ## Remaining product boundary
 
 This deployment proves the agent loop, local file edits, identity, revocation,

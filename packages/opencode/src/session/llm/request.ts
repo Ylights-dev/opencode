@@ -205,12 +205,34 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
 })
 
-function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {
+const SEMENA_TOOL_ALLOWLIST = new Set([
+  "bash",
+  "edit",
+  "glob",
+  "grep",
+  "list",
+  "lsp",
+  "read",
+  "skill",
+  "task",
+  "todowrite",
+  "webfetch",
+  "websearch",
+  "write",
+])
+
+function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user" | "model">) {
   const disabled = Permission.disabled(
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  return Record.filter(
+    input.tools,
+    (_, k) =>
+      input.user.tools?.[k] !== false &&
+      !disabled.has(k) &&
+      (input.model.providerID !== "semena" || SEMENA_TOOL_ALLOWLIST.has(k)),
+  )
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {

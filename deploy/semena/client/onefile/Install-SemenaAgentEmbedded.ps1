@@ -17,6 +17,8 @@ $configRoot = Join-Path $runtimeRoot 'config\opencode'
 $sourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $certificateSource = Join-Path $sourceRoot 'semena-agent-ca.crt'
 $certificateTarget = Join-Path $runtimeRoot 'semena-agent-ca.crt'
+$certificateNodeRoot = Join-Path $env:LOCALAPPDATA 'Semena-Agent'
+$certificateNodeTarget = Join-Path $certificateNodeRoot 'semena-agent-ca.crt'
 $setupPath = Join-Path $sourceRoot 'Semena-Agent-Setup-x64.exe'
 $pythonInstaller = Join-Path $sourceRoot 'python-3.13.13-amd64.exe'
 $pythonWheelRoot = Join-Path $sourceRoot 'python-wheels'
@@ -165,13 +167,14 @@ if ($ApiKey -notmatch '^sk-[A-Za-z0-9_-]{16,}$') {
     throw 'Сервер не выдал ключ доступа. Обратитесь к администратору.'
 }
 
-New-Item -ItemType Directory -Force -Path $runtimeRoot, $configRoot, $Workspace | Out-Null
+New-Item -ItemType Directory -Force -Path $runtimeRoot, $configRoot, $Workspace, $certificateNodeRoot | Out-Null
 [Environment]::SetEnvironmentVariable('SEMENA_AGENT_API_KEY', $ApiKey, 'User')
 $env:SEMENA_AGENT_API_KEY = $ApiKey
 
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'agent-config.json') -Destination (Join-Path $configRoot 'opencode.json') -Force
 Remove-Item -LiteralPath (Join-Path $Workspace 'AGENTS.md') -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath $certificateSource -Destination $certificateTarget -Force
+Copy-Item -LiteralPath $certificateSource -Destination $certificateNodeTarget -Force
 Install-AgentPython
 
 $actualHash = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA256).Hash
