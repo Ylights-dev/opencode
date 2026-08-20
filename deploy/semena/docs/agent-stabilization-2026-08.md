@@ -120,7 +120,7 @@ Verified scenarios:
 ### Automated checks
 
 ```text
-Focused OpenCode tests:                       522 passed
+Focused OpenCode tests:                       525 passed
 Final recovery/read regression subset:         54 passed
 OpenCode TypeScript typecheck:                 passed
 Semena deployment pytest suite:                31 passed
