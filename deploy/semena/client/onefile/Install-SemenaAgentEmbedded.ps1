@@ -187,7 +187,7 @@ $oldShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Semena OpenC
 Remove-Item -LiteralPath $oldShortcut -Force -ErrorAction SilentlyContinue
 
 Write-Host 'Устанавливаю приложение...' -ForegroundColor Cyan
-$process = Start-Process -FilePath $setupPath -Wait -PassThru
+$process = Start-Process -FilePath $setupPath -ArgumentList '/S' -Wait -PassThru
 if ($process.ExitCode -ne 0) {
     throw "Установщик завершился с кодом $($process.ExitCode)."
 }

@@ -53,7 +53,7 @@ export function provider(model: Provider.Model) {
 
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
-  readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly skills: (agent: Agent.Info, model?: Provider.Model) => Effect.Effect<string | undefined>
   readonly mcp: (agent: Agent.Info, permission?: PermissionV1.Ruleset) => Effect.Effect<string | undefined>
 }
 
@@ -105,18 +105,29 @@ const layer = Layer.effect(
         ].filter((part): part is string => part !== undefined)
       }),
 
-      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
-        if (Permission.disabled(["skill"], agent.permission).has("skill")) return
+      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info, model?: Provider.Model) {
+        const mandatory = model?.providerID === "semena" ? yield* skill.get(Skill.VERIFY_WORK_SKILL_NAME) : undefined
+        const parts = mandatory
+          ? [
+              `<mandatory_skill name="${mandatory.name}" loaded="true">`,
+              mandatory.content.trim(),
+              "</mandatory_skill>",
+              "This skill is already loaded. Follow it without calling the skill tool again.",
+            ]
+          : []
 
-        const list = yield* skill.available(agent)
+        if (!Permission.disabled(["skill"], agent.permission).has("skill")) {
+          const list = yield* skill.available(agent)
+          parts.push(
+            "Skills provide specialized instructions and workflows for specific tasks.",
+            "Use the skill tool to load a skill when a task matches its description.",
+            // the agents seem to ingest the information about skills a bit better if we present a more verbose
+            // version of them here and a less verbose version in tool description, rather than vice versa.
+            Skill.fmt(list, { verbose: true }),
+          )
+        }
 
-        return [
-          "Skills provide specialized instructions and workflows for specific tasks.",
-          "Use the skill tool to load a skill when a task matches its description.",
-          // the agents seem to ingest the information about skills a bit better if we present a more verbose
-          // version of them here and a less verbose version in tool description, rather than vice versa.
-          Skill.fmt(list, { verbose: true }),
-        ].join("\n")
+        return parts.length ? parts.join("\n") : undefined
       }),
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {

@@ -111,6 +111,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("openpyxl", embedded)
         self.assertIn("xlrd", embedded)
         self.assertIn('import openpyxl, xlrd', embedded)
+        self.assertIn("-ArgumentList '/S'", embedded)
         self.assertIn("(Join-Path $configRoot 'AGENTS.md')", embedded)
         self.assertNotIn("Invoke-WebRequest", embedded)
         self.assertIn("Invoke-RestMethod -Method Post", embedded)
@@ -162,6 +163,23 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn('return [PROMPT_SEMENA, PROMPT_DEFAULT]', system)
         self.assertIn("SEMENA_TOOL_ALLOWLIST", request)
         self.assertNotIn("compactTools", request)
+
+    def test_semena_automatically_loads_mandatory_verification_skill(self) -> None:
+        skill = (ROOT.parents[1] / "packages" / "opencode" / "src" / "skill" / "index.ts").read_text(
+            encoding="utf-8"
+        )
+        system = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "system.ts").read_text(
+            encoding="utf-8"
+        )
+        prompt = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "prompt.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('VERIFY_WORK_SKILL_NAME = "verify-work"', skill)
+        self.assertIn("The mutating command's own exit code", skill)
+        self.assertIn('<mandatory_skill name="${mandatory.name}" loaded="true">', system)
+        self.assertIn("This skill is already loaded", system)
+        self.assertIn("tools.findLastIndex(isMutation)", prompt)
+        self.assertIn('["read", "grep", "lsp"]', prompt)
 
     def test_spreadsheet_read_supports_generic_structure_discovery(self) -> None:
         read_tool = (ROOT.parents[1] / "packages" / "opencode" / "src" / "tool" / "read.ts").read_text(

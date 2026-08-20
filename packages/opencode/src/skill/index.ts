@@ -34,6 +34,26 @@ const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
 const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
+export const VERIFY_WORK_SKILL_NAME = "verify-work"
+const VERIFY_WORK_SKILL_DESCRIPTION =
+  "Mandatory evidence-based self-check before claiming that an action, file change, command, research task, or generated artifact is complete."
+const VERIFY_WORK_SKILL_BODY = `# Verify work
+
+Apply this workflow before claiming that requested work is complete.
+
+1. Restate the observable acceptance conditions from the user's request. Do not replace them with easier proxy conditions.
+2. Inspect the result after the action with an independent read-only tool call. The mutating command's own exit code, printed message, or in-memory object is not independent evidence.
+3. Compare the observed result with every material acceptance condition:
+   - Files and documents: reopen the exact output path and inspect the resulting content and structure.
+   - Spreadsheets: verify the exact sheet, headers, data range, row count, relevant values, uniqueness, formulas, and preservation requirements.
+   - Code and configuration: inspect the diff or resulting file and run focused tests, validation, lint, or type checking appropriate to the change.
+   - Commands and system changes: query the resulting state separately; exit code zero alone is insufficient.
+   - Web research: open the relevant result pages and make claims only from content actually returned by tools.
+4. If any check fails, correct the work and repeat the independent check. If correction is impossible, report the failure and the observed evidence plainly.
+5. In the final response, describe only actions and results supported by tool output. Mention the essential verification performed; never present intended, simulated, or example output as actual execution.
+
+Use verification depth proportional to the task. Casual conversation and purely conceptual answers do not require artificial tool calls, but every claim that an external action or artifact was completed requires observed evidence.`
+
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
@@ -282,6 +302,14 @@ const layer = Layer.effect(
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
+        // Corporate verification is an invariant, so a disk skill with the
+        // same name must not weaken or replace it.
+        s.skills[VERIFY_WORK_SKILL_NAME] = {
+          name: VERIFY_WORK_SKILL_NAME,
+          description: VERIFY_WORK_SKILL_DESCRIPTION,
+          location: "<built-in>",
+          content: VERIFY_WORK_SKILL_BODY,
+        }
         return s
       }),
     )

@@ -47,6 +47,14 @@ one universal recovery turn for an unresolved tool error. After an edit, write,
 or side-effecting shell command, the session requires a separate read-only
 inspection turn before accepting a completion claim.
 
+The fork includes a built-in `verify-work` skill. Semena loads its full content
+automatically on every turn, so the model cannot skip activation by omitting a
+`skill` call. The skill defines evidence appropriate to files, spreadsheets,
+code, commands, system state, and web research. The host audit remains the
+enforcement layer: a `skill` or task-management call after a mutation does not
+satisfy verification; a completed `read`, `grep`, diagnostic shell command, or
+`lsp` inspection after the latest mutation is required.
+
 ### Provider-scoped tool set
 
 The Semena model receives only the core tools needed for local agent work:
@@ -120,10 +128,10 @@ Verified scenarios:
 ### Automated checks
 
 ```text
-Focused OpenCode tests:                       525 passed
+Focused OpenCode tests:                       546 passed
 Final recovery/read regression subset:         54 passed
 OpenCode TypeScript typecheck:                 passed
-Semena deployment pytest suite:                31 passed
+Semena deployment pytest suite:                32 passed
 ```
 
 ## Build and publication
@@ -138,16 +146,20 @@ http://10.1.50.101:3010/downloads/Semena-Agent-Setup-x64.exe
 Published artifact:
 
 ```text
-Version: 0.0.0-prod-202608201425
-SHA-256: B53400137A7DFA6B5D17BE2197F5823DD337DCB5922A3157043D21FFB1E0434A
-Size: 159382734 bytes
+Version: 0.0.0-prod-202608201508
+SHA-256: 77A3150F40DC37714BB8A3562F67CD975673D1A6BAAC3AFB2658EB8612491072
+Size: 159382615 bytes
 ```
 
 The compatibility archive remains available at
 `/downloads/SemenaOpenCodeSetup.zip` with SHA-256
-`4D3D38F8092A81E5BA108F107981D0A4A56A13B22B45D18D5465835F9924D7D7`.
+`0C09B9A63B694519F3D79590F23DB0F6F220905D4FABF2ED0559FD3E7E7375D4`.
 Both artifacts were downloaded back through the public HTTP endpoint and their
 sizes and hashes matched the local build.
+
+The outer installer now passes `/S` to the embedded Electron installer. This
+prevents an unattended reinstall from waiting indefinitely on a hidden nested
+installer window.
 
 Fresh desktop logs showed the sidecar becoming ready without the previous extra
 certificate warning. A renderer `ResizeObserver` warning remains non-fatal and

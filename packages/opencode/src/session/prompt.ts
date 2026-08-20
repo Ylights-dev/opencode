@@ -119,12 +119,29 @@ export function hasUnresolvedToolError(messages: readonly SessionV1.WithParts[],
 }
 
 export function needsMutationAudit(messages: readonly SessionV1.WithParts[], userID: string) {
-  const latest = latestTurnTool(messages, userID)
-  if (latest?.state.status !== "completed") return false
-  if (SEMENA_MUTATION_TOOLS.has(latest.tool)) return true
-  if (latest.tool !== "bash") return false
-  const command = latest.state.input.command
-  return typeof command === "string" && SEMENA_SHELL_MUTATION_PATTERN.test(command)
+  const tools = messages
+    .filter((message) => message.info.role === "assistant" && message.info.parentID === userID)
+    .flatMap((message) => message.parts)
+    .filter((part): part is SessionV1.ToolPart => part.type === "tool" && !isOrphanedInterruptedTool(part))
+
+  const isMutation = (part: SessionV1.ToolPart) => {
+    if (part.state.status !== "completed") return false
+    if (SEMENA_MUTATION_TOOLS.has(part.tool)) return true
+    if (part.tool !== "bash") return false
+    const command = part.state.input.command
+    return typeof command === "string" && SEMENA_SHELL_MUTATION_PATTERN.test(command)
+  }
+
+  const mutation = tools.findLastIndex(isMutation)
+  if (mutation === -1) return false
+
+  return !tools.slice(mutation + 1).some((part) => {
+    if (part.state.status !== "completed") return false
+    if (["read", "grep", "lsp"].includes(part.tool)) return true
+    if (part.tool !== "bash") return false
+    const command = part.state.input.command
+    return typeof command === "string" && !SEMENA_SHELL_MUTATION_PATTERN.test(command)
+  })
 }
 
 export interface Interface {
@@ -1310,7 +1327,7 @@ const layer = Layer.effect(
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
             const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
-              sys.skills(agent),
+              sys.skills(agent, model),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),

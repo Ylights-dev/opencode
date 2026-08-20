@@ -49,4 +49,32 @@ describe("hasUnresolvedToolError", () => {
   test("audits a spreadsheet write inside Python", () => {
     expect(needsMutationAudit(messages(["completed"], "df.to_excel('result.xlsx')"), "user-1")).toBe(true)
   })
+
+  test("does not let a skill call satisfy a pending mutation audit", () => {
+    const input = [
+      {
+        info: { role: "assistant", parentID: "user-1" },
+        parts: [
+          { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "result.txt" } } },
+          { type: "tool", tool: "skill", state: { status: "completed", input: { name: "verify-work" } } },
+        ],
+      },
+    ] as unknown as SessionV1.WithParts[]
+
+    expect(needsMutationAudit(input, "user-1")).toBe(true)
+  })
+
+  test("accepts an independent read after a mutation", () => {
+    const input = [
+      {
+        info: { role: "assistant", parentID: "user-1" },
+        parts: [
+          { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "result.txt" } } },
+          { type: "tool", tool: "read", state: { status: "completed", input: { filePath: "result.txt" } } },
+        ],
+      },
+    ] as unknown as SessionV1.WithParts[]
+
+    expect(needsMutationAudit(input, "user-1")).toBe(false)
+  })
 })

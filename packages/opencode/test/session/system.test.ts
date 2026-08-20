@@ -12,6 +12,12 @@ import { testEffect } from "../lib/effect"
 
 const skills: Skill.Info[] = [
   {
+    name: Skill.VERIFY_WORK_SKILL_NAME,
+    description: "Mandatory evidence-based self-check.",
+    location: "<built-in>",
+    content: "# Verify work\n\nInspect the result independently after changing it.",
+  },
+  {
     name: "zeta-skill",
     description: "Zeta skill.",
     location: "/tmp/zeta-skill/SKILL.md",
@@ -114,6 +120,20 @@ describe("session.system", () => {
       expect(middle).toBeGreaterThan(alpha)
       expect(zeta).toBeGreaterThan(middle)
       expect(output).not.toContain("manual-skill")
+    }),
+  )
+
+  it.effect("automatically loads the mandatory verification skill for Semena", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.skills(build, {
+        providerID: "semena",
+        api: { id: "semena-gemma4" },
+      } as Provider.Model)
+
+      expect(output).toContain('<mandatory_skill name="verify-work" loaded="true">')
+      expect(output).toContain("Inspect the result independently after changing it.")
+      expect(output).toContain("already loaded")
     }),
   )
 
