@@ -124,6 +124,9 @@ Verified scenarios:
    exactly 1103 unique varieties: zero missing, zero extra, zero duplicates.
 4. A non-zero shell exit remains a tool error and cannot be converted into a
    successful completion claim.
+5. A live `semena-gemma4` run in a fresh workspace created a two-line text file
+   with `write`, independently reopened it with `read`, observed the exact two
+   requested lines, and only then returned a successful final answer.
 
 ### Automated checks
 
