@@ -15,7 +15,7 @@
         "semena-gemma4": {
           "name": "Семена Code",
           "limit": {
-            "context": 16384,
+            "context": 32768,
             "output": 4096
           }
         }
@@ -23,7 +23,7 @@
     }
   },
   "permission": {
-    "external_directory": "allow",
+    "external_directory": "ask",
     "bash": "allow",
     "webfetch": "allow",
     "websearch": "allow",

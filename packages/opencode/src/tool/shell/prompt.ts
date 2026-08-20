@@ -56,6 +56,7 @@ function powershellNotes(name: string) {
 - Use double quotes for interpolated strings (\`"Hello $name"\`), single quotes for verbatim strings.
 - Prefer full cmdlet names like \`Get-ChildItem\`, \`Set-Content\`, \`Remove-Item\`, and \`New-Item\` over aliases.
 - For file paths, especially paths with spaces or non-ASCII characters, use quoted \`-LiteralPath\` arguments instead of aliases such as \`ls\`.
+- On Windows, invoke the bundled Python runtime as \`py -3\`, not \`python3\` or \`python\`.
 - Use \`$(...)\` for subexpressions. Use \`@(...)\` for array expressions.
 - To call a native executable whose path contains spaces, use the call operator: \`& "path/to/exe" args\`.
 - Escape special characters with the PowerShell backtick character.`

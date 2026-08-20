@@ -292,12 +292,20 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
 
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && Shell.ps(shell)) {
+    const encoded = Buffer.from(command, "utf-8").toString("base64")
     const utf8Prefix = [
       "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)",
       "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
       "$OutputEncoding = [Console]::OutputEncoding",
+      `$__opencodeCommand = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encoded}'))`,
+      "$global:LASTEXITCODE = 0",
+      "Invoke-Expression $__opencodeCommand",
+      "$__opencodeSuccess = $?",
+      "$__opencodeExit = $LASTEXITCODE",
+      "if ($__opencodeExit) { exit $__opencodeExit }",
+      "if (-not $__opencodeSuccess) { exit 1 }",
     ].join("; ")
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `${utf8Prefix}; ${command}`], {
+    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", utf8Prefix], {
       cwd,
       env,
       stdin: "ignore",

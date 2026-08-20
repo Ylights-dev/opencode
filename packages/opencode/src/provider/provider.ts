@@ -1740,27 +1740,9 @@ const layer = Layer.effect(
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
-        const semenaNoThink =
-          model.providerID === "semena" && model.api.npm === "@ai-sdk/openai-compatible"
-
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
-          if (semenaNoThink && typeof opts.body === "string") {
-            try {
-              const url = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url ?? "")
-              if (url.includes("/chat/completions")) {
-                const body = JSON.parse(opts.body)
-                if (body && typeof body === "object" && !Array.isArray(body)) {
-                  opts.body = JSON.stringify({
-                    ...body,
-                    reasoning_effort: body.reasoning_effort ?? "none",
-                    think: body.think ?? false,
-                  })
-                }
-              }
-            } catch {}
-          }
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined

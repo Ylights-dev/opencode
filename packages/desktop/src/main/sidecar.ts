@@ -96,6 +96,8 @@ function prepareSidecarEnv(password: string, userDataPath: string) {
     OPENCODE_WEBSEARCH_PROVIDER: process.env.OPENCODE_WEBSEARCH_PROVIDER ?? "parallel",
     OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS:
       process.env.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS ?? "3600000",
+    PYTHONIOENCODING: process.env.PYTHONIOENCODING ?? "utf-8",
+    PYTHONUTF8: process.env.PYTHONUTF8 ?? "1",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
 }

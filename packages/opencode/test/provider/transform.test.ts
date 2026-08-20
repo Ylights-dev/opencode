@@ -796,14 +796,14 @@ describe("ProviderTransform.options - semena local model", () => {
       headers: {},
     }) as any
 
-  test("disables Ollama thinking for Semena OpenAI-compatible provider", () => {
+  test("does not disable Ollama thinking for Semena OpenAI-compatible provider", () => {
     const result = ProviderTransform.options({
       model: createModel("semena", "@ai-sdk/openai-compatible"),
       sessionID,
       providerOptions: {},
     })
-    expect(result.reasoningEffort).toBe("none")
-    expect(result.think).toBe(false)
+    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.think).toBeUndefined()
   })
 
   test("does not apply Semena thinking flag to other OpenAI-compatible providers", () => {
@@ -867,6 +867,64 @@ describe("ProviderTransform.options - semena local model", () => {
       }),
     )
     expect(Object.keys(result.tools).sort()).toEqual(["bash", "read"])
+  })
+
+  test("preserves Semena tool descriptions and parameter guidance", async () => {
+    const description =
+      "Read files from disk. This tool can preview Excel spreadsheets (.xls, .xlsx, .xlsm), including sheets and rows."
+    const parameterDescription = "Exact absolute path, including spaces and non-ASCII characters"
+    const result = await Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-compact",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: "semena", modelID: "semena-gemma4" },
+        } as any,
+        sessionID,
+        model: createModel("semena", "@ai-sdk/openai-compatible"),
+        agent: { name: "test", mode: "primary", options: {}, permission: [] } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {
+          read: {
+            description,
+            inputSchema: jsonSchema({
+              title: "Read input",
+              type: "object",
+              properties: {
+                path: { type: "string", description: parameterDescription, examples: ["report.xlsx"] },
+                limit: { type: "integer", minimum: 1 },
+              },
+              required: ["path"],
+            }),
+          },
+        },
+        provider: { id: "semena", options: {} } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+
+    const item = result.tools.read as any
+    expect(item.description).toBe(description)
+    expect(item.inputSchema.jsonSchema).toEqual({
+      title: "Read input",
+      type: "object",
+      properties: {
+        path: { type: "string", description: parameterDescription, examples: ["report.xlsx"] },
+        limit: { type: "integer", minimum: 1 },
+      },
+      required: ["path"],
+    })
   })
 })
 

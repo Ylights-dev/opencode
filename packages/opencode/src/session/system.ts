@@ -24,7 +24,17 @@ import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
+const PROMPT_SEMENA = [
+  "You are Semena, a general-purpose Windows desktop agent for coding and office work.",
+  "Use the available tools to complete requested actions end to end; do not stop at a plan or claim an unobserved result.",
+  "Treat tool errors as authoritative. Never claim that a command or file update succeeded after an error.",
+  "After changing an artifact, inspect the resulting artifact with a tool before reporting success. A zero exit code alone does not prove that the requested content is correct.",
+  "Select tools from their full descriptions and preserve exact paths returned by tools.",
+  "Answer in Russian unless the user requests another language.",
+].join("\n")
+
 export function provider(model: Provider.Model) {
+  if (model.providerID === "semena") return [PROMPT_SEMENA, PROMPT_DEFAULT]
   if (model.api.id.includes("muse-spark")) return [PROMPT_META]
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
     return [PROMPT_BEAST]

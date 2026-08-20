@@ -290,7 +290,7 @@ def run_eval(model: str, keep: bool = False) -> dict[str, Any]:
                     "messages": messages,
                     "tools": TOOLS,
                     "stream": False,
-                    "options": {"temperature": 0.1, "num_ctx": 16384},
+                    "options": {"temperature": 0.1, "num_ctx": 32768},
                 },
             )
             message = response.get("message", {})

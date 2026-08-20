@@ -38,6 +38,14 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/webp",
 ])
 
+export function toolResultError(result: unknown): Error | undefined {
+  if (!isRecord(result) || !isRecord(result.metadata)) return
+  const exit = result.metadata.exit
+  if (typeof exit !== "number" || exit === 0) return
+  const output = typeof result.output === "string" ? result.output : "(no output)"
+  return new Error(`Tool command failed with exit code ${exit}.\n${output}`)
+}
+
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
@@ -130,6 +138,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
               output,
             )
+            const failure = toolResultError(output)
+            if (failure) throw failure
             if (options.abortSignal?.aborted) {
               yield* input.processor.completeToolCall(options.toolCallId, output)
             }

@@ -13,7 +13,7 @@
         "semena-gemma4": {
           "name": "Semena Agent (Gemma 4 12B)",
           "limit": {
-            "context": 16384,
+            "context": 32768,
             "output": 4096
           }
         }

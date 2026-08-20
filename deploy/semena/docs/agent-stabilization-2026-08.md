@@ -1,6 +1,6 @@
 # Semena Agent stabilization report
 
-Assessment and implementation date: 2026-08-17.
+Assessment dates: 2026-08-17 and 2026-08-20.
 
 ## Scope
 
@@ -16,8 +16,10 @@ other providers remains unchanged.
 The failures initially looked like insufficient model capability, but several
 were integration defects:
 
-- the Semena request enabled or preserved reasoning fields that consumed the
-  response budget and exposed internal reasoning instead of completing work;
+- an early stabilization attempt disabled reasoning, truncated tool
+  descriptions, replaced the upstream system prompt, forced tool selection,
+  and added a synthetic `finish_task` tool; this made the weak local model less
+  capable of planning and allowed it to report completion without evidence;
 - the local 12B model received a large set of unrelated MCP/plugin tools, making
   tool selection unreliable;
 - the desktop sidecar did not consistently receive the corporate CA path;
@@ -30,20 +32,20 @@ were integration defects:
 
 ## Implemented corrections
 
-### Semena request normalization
+### OpenCode agent contract
 
-For the `semena` OpenAI-compatible provider, requests now explicitly set:
+The Semena provider now preserves the full upstream OpenCode system prompt,
+full tool descriptions, and complete JSON schemas. The Semena instructions are
+an overlay that adds Windows and artifact-verification rules; they do not
+replace the upstream agent contract. The provider no longer forces
+`reasoning_effort`, `think`, or `toolChoice: required`, and there is no
+synthetic `finish_task` tool.
 
-```json
-{
-  "reasoning_effort": "none",
-  "think": false
-}
-```
-
-The values are applied both at provider-option transformation and immediately
-before `/chat/completions` is sent. The second layer protects against SDKs that
-drop provider-specific options.
+Tool execution errors are authoritative. A non-zero shell exit is returned to
+the model as an error. Before a final answer, the session may perform at most
+one universal recovery turn for an unresolved tool error. After an edit, write,
+or side-effecting shell command, the session requires a separate read-only
+inspection turn before accepting a completion claim.
 
 ### Provider-scoped tool set
 
@@ -55,8 +57,8 @@ todowrite, webfetch, websearch, write
 ```
 
 External MCP and plugin tools are omitted only for the Semena provider. This
-reduces prompt size and tool-choice ambiguity without disabling OpenCode
-extensions globally.
+keeps the employee agent focused without weakening the contract of the tools
+that remain available or disabling OpenCode extensions globally.
 
 Desktop starts the sidecar with `OPENCODE_PURE=1` as an additional isolation
 measure.
@@ -82,9 +84,10 @@ A captured OpenCode request contained:
 
 - model `semena-gemma4`;
 - `max_tokens: 4096`;
-- `reasoning_effort: none`;
-- `think: false`;
-- 10 active core tools and no unrelated 1C/video tools.
+- the full upstream system prompt plus the Semena overlay;
+- complete descriptions and schemas for the active core tools;
+- no forced reasoning or tool-choice overrides;
+- active core tools and no unrelated 1C/video tools.
 
 ### Live gateway
 
@@ -104,19 +107,23 @@ $env:NODE_EXTRA_CA_CERTS = "$env:LOCALAPPDATA\Semena-Agent\semena-agent-ca.crt"
 
 Verified scenarios:
 
-1. A no-tool prompt returned exactly `OK` with zero reasoning tokens.
-2. From the employee workspace, the agent found `Аэлита вес.xls` with `glob`,
-   read it with the built-in spreadsheet-aware `read` tool, and returned
-   `TDSheet, 1374, 22` without creating files.
+1. From the employee workspace, the agent found `Аэлита вес.xls` with `glob`
+   and inspected it with the built-in spreadsheet-aware `read` tool.
+2. The reader inferred the physical columns under the compound
+   `Культура,Сорт` heading and reported the stable first data row.
+3. A real end-to-end extraction created an `.xlsx` artifact, then performed a
+   separate read-back inspection before answering. Independent validation found
+   exactly 1103 unique varieties: zero missing, zero extra, zero duplicates.
+4. A non-zero shell exit remains a tool error and cannot be converted into a
+   successful completion claim.
 
 ### Automated checks
 
 ```text
-Semena provider tests:                         3 passed
-Spreadsheet read regression:                  1 passed
-OpenCode TypeScript typecheck:                passed
-Semena deployment pytest suite:              29 passed
-Web-search tool tests from the prior build:  10 passed
+Focused OpenCode tests:                       522 passed
+Final recovery/read regression subset:         54 passed
+OpenCode TypeScript typecheck:                 passed
+Semena deployment pytest suite:                31 passed
 ```
 
 ## Build and publication
@@ -131,9 +138,16 @@ http://10.1.50.101:3010/downloads/Semena-Agent-Setup-x64.exe
 Published artifact:
 
 ```text
-SHA-256: C9ADB94A24F63EF643BF1BDFCF4DCB8B2D68E0C6619AB9D202EFBA93D496DAC9
-Size: approximately 152 MiB
+Version: 0.0.0-prod-202608201425
+SHA-256: B53400137A7DFA6B5D17BE2197F5823DD337DCB5922A3157043D21FFB1E0434A
+Size: 159382734 bytes
 ```
+
+The compatibility archive remains available at
+`/downloads/SemenaOpenCodeSetup.zip` with SHA-256
+`4D3D38F8092A81E5BA108F107981D0A4A56A13B22B45D18D5465835F9924D7D7`.
+Both artifacts were downloaded back through the public HTTP endpoint and their
+sizes and hashes matched the local build.
 
 Fresh desktop logs showed the sidecar becoming ready without the previous extra
 certificate warning. A renderer `ResizeObserver` warning remains non-fatal and

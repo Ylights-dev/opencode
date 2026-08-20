@@ -84,6 +84,13 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
+  test("layers the Semena identity over the full default agent prompt", () => {
+    const prompts = SystemPrompt.provider({ providerID: "semena", api: { id: "semena-gemma4" } } as Provider.Model)
+    expect(prompts).toHaveLength(2)
+    expect(prompts[0]).toContain("general-purpose Windows desktop agent")
+    expect(prompts[1]).toContain("Only use tools to complete tasks")
+  })
+
   test("selects the Meta prompt for Muse Spark model IDs", () => {
     expect(SystemPrompt.provider({ api: { id: "meta/muse-spark-preview" } } as Provider.Model)[0]).toContain(
       "Meta Muse Spark",

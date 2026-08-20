@@ -81,6 +81,12 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+const SEMENA_TOOL_ERROR_RECOVERY_PROMPT = `The most recent tool call failed. Its error is authoritative: the requested action was not completed by that call. Diagnose the error, retry with a corrected tool call, and verify the actual result. Do not repeat the previous success claim. If recovery is impossible, report the failure accurately.`
+const SEMENA_MUTATION_AUDIT_PROMPT = `Audit the evidence before answering. If the task created or changed an artifact, call an appropriate read-only tool now to inspect the exact resulting artifact and compare its contents with the user's request. Use structural evidence already reported by tools, including inferred physical columns and stable data starts; values from pre-data header rows are verification failures. Correct a failed check instead of reporting success. Do not present example verification code as if it ran. If the latest shell call was only observational, answer from its actual output.`
+const SEMENA_MUTATION_TOOLS = new Set(["edit", "write", "apply_patch"])
+const SEMENA_SHELL_MUTATION_PATTERN =
+  /(?:^|[\s;|])(?:set-content|add-content|out-file|copy-item|move-item|remove-item|new-item)\b|(?:^|\s)(?:>|>>)(?:\s|$)|\.(?:to_excel|to_csv|to_json|write_text|write_bytes|save)\s*\(|\bopen\s*\([^)]*,\s*["'][wax]/i
+
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
   const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
@@ -97,6 +103,28 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
   // They are not pending work and must not trigger an assistant-prefill request.
   return part.state.status === "error" && part.state.metadata?.interrupted === true
+}
+
+export function latestTurnTool(messages: readonly SessionV1.WithParts[], userID: string) {
+  return messages
+    .filter((message) => message.info.role === "assistant" && message.info.parentID === userID)
+    .flatMap((message) => message.parts)
+    .filter((part): part is SessionV1.ToolPart => part.type === "tool" && !isOrphanedInterruptedTool(part))
+    .at(-1)
+}
+
+export function hasUnresolvedToolError(messages: readonly SessionV1.WithParts[], userID: string) {
+  const latest = latestTurnTool(messages, userID)
+  return latest?.state.status === "error"
+}
+
+export function needsMutationAudit(messages: readonly SessionV1.WithParts[], userID: string) {
+  const latest = latestTurnTool(messages, userID)
+  if (latest?.state.status !== "completed") return false
+  if (SEMENA_MUTATION_TOOLS.has(latest.tool)) return true
+  if (latest.tool !== "bash") return false
+  const command = latest.state.input.command
+  return typeof command === "string" && SEMENA_SHELL_MUTATION_PATTERN.test(command)
 }
 
 export interface Interface {
@@ -1083,6 +1111,10 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let toolErrorRecoveries = 0
+        let toolErrorRecovery = false
+        let mutationAudits = 0
+        let mutationAudit = false
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1107,26 +1139,49 @@ const layer = Layer.effect(
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
-
           if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
             lastAssistant.parentID === lastUser.id
           ) {
-            const orphan = lastAssistantMsg?.parts.find(
-              (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
-            )
-            if (orphan) {
-              yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+            const recoverToolError =
+              lastUser.model.providerID === "semena" &&
+              toolErrorRecoveries < 1 &&
+              hasUnresolvedToolError(msgs, lastUser.id)
+            if (recoverToolError) {
+              toolErrorRecoveries += 1
+              toolErrorRecovery = true
+              yield* Effect.logWarning("recovering semena turn after tool error", {
                 "session.id": sessionID,
                 messageID: lastAssistant.id,
-                tool: orphan.tool,
-                callID: orphan.callID,
               })
+            } else if (
+              lastUser.model.providerID === "semena" &&
+              mutationAudits < 1 &&
+              needsMutationAudit(msgs, lastUser.id)
+            ) {
+              mutationAudits += 1
+              mutationAudit = true
+              yield* Effect.logInfo("auditing semena turn after mutation-capable tool", {
+                "session.id": sessionID,
+                messageID: lastAssistant.id,
+              })
+            } else {
+              const orphan = lastAssistantMsg?.parts.find(
+                (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
+              )
+              if (orphan) {
+                yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
+                  "session.id": sessionID,
+                  messageID: lastAssistant.id,
+                  tool: orphan.tool,
+                  callID: orphan.callID,
+                })
+              }
+              yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+              break
             }
-            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
-            break
           }
 
           step++
@@ -1269,6 +1324,14 @@ const layer = Layer.effect(
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            if (toolErrorRecovery) {
+              system.push(SEMENA_TOOL_ERROR_RECOVERY_PROMPT)
+              toolErrorRecovery = false
+            }
+            if (mutationAudit) {
+              system.push(SEMENA_MUTATION_AUDIT_PROMPT)
+              mutationAudit = false
+            }
             const result = yield* handle.process({
               user: lastUser,
               agent,

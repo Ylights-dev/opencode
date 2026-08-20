@@ -53,7 +53,7 @@ function Test-AgentPython {
         return $false
     }
 
-    & $launcher -3 -c "import openpyxl; print(openpyxl.__version__)" *> $null
+    & $launcher -3 -c "import openpyxl, xlrd; print(openpyxl.__version__, xlrd.__version__)" *> $null
     return $LASTEXITCODE -eq 0
 }
 
@@ -172,6 +172,7 @@ New-Item -ItemType Directory -Force -Path $runtimeRoot, $configRoot, $Workspace,
 $env:SEMENA_AGENT_API_KEY = $ApiKey
 
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'agent-config.json') -Destination (Join-Path $configRoot 'opencode.json') -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'AGENTS.md') -Destination (Join-Path $configRoot 'AGENTS.md') -Force
 Remove-Item -LiteralPath (Join-Path $Workspace 'AGENTS.md') -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath $certificateSource -Destination $certificateTarget -Force
 Copy-Item -LiteralPath $certificateSource -Destination $certificateNodeTarget -Force

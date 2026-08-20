@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { execFile } from "node:child_process"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -16,6 +17,8 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
+const DEFAULT_SPREADSHEET_LIMIT = 25
+const MAX_SPREADSHEET_LIMIT = 100
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const STRUCTURED_DOCUMENT_EXTENSIONS = new Set([
   ".doc",
@@ -192,10 +195,14 @@ export const ReadTool = Tool.define<
       return { raw, count: flags.count, cut: flags.cut, more: flags.more, offset: opts.offset }
     })
 
-    const isStructuredDocument = (filepath: string) => STRUCTURED_DOCUMENT_EXTENSIONS.has(path.extname(filepath).toLowerCase())
+    const isStructuredDocument = (filepath: string) =>
+      STRUCTURED_DOCUMENT_EXTENSIONS.has(path.extname(filepath).toLowerCase())
     const isSpreadsheet = (filepath: string) => SPREADSHEET_EXTENSIONS.has(path.extname(filepath).toLowerCase())
 
-    const inspectSpreadsheet = Effect.fn("ReadTool.inspectSpreadsheet")(function* (filepath: string) {
+    const inspectSpreadsheet = Effect.fn("ReadTool.inspectSpreadsheet")(function* (
+      filepath: string,
+      opts: { offset: number; limit: number },
+    ) {
       const script = String.raw`
 import json
 import math
@@ -204,8 +211,12 @@ import sys
 
 filepath = sys.argv[1]
 ext = os.path.splitext(filepath)[1].lower()
-limit_rows = 25
+offset = max(1, int(sys.argv[2]))
+limit_rows = max(1, min(${MAX_SPREADSHEET_LIMIT}, int(sys.argv[3])))
 limit_cols = 20
+start_row = offset - 1
+landmark_scan_rows = 500
+landmark_limit = 8
 
 def clean(value):
     if value is None:
@@ -217,15 +228,81 @@ def clean(value):
             return int(value)
     return str(value)
 
+def column_profiles(rows, width):
+    profiles = []
+    for col_idx in range(min(width, limit_cols)):
+        count = 0
+        samples = []
+        seen = set()
+        for values in rows:
+            value = values[col_idx] if col_idx < len(values) else ""
+            if value == "":
+                continue
+            count += 1
+            key = json.dumps(value, ensure_ascii=False, sort_keys=True)
+            if key in seen or len(samples) >= 6:
+                continue
+            seen.add(key)
+            samples.append(value)
+        if count:
+            profiles.append({"index": col_idx, "non_empty": count, "samples": samples})
+    return profiles
+
+def infer_subcolumns(rows, profiles):
+    counts = {item["index"]: item["non_empty"] for item in profiles}
+    inferred = []
+    for row_idx, values in enumerate(rows):
+        occupied = [idx for idx, value in enumerate(values) if value != ""]
+        for position, col_idx in enumerate(occupied):
+            label = values[col_idx]
+            if not isinstance(label, str):
+                continue
+            separator = "," if "," in label else ";" if ";" in label else None
+            if not separator:
+                continue
+            fields = [part.strip() for part in label.split(separator) if part.strip()]
+            if len(fields) < 2 or len(fields) > 6:
+                continue
+            end = occupied[position + 1] if position + 1 < len(occupied) else len(values)
+            active = [idx for idx in range(col_idx, end) if counts.get(idx, 0) >= 3]
+            if len(active) != len(fields):
+                continue
+            data_start = None
+            for candidate in range(row_idx + 1, max(row_idx + 1, len(rows) - 2)):
+                window = rows[candidate:candidate + 3]
+                if len(window) == 3 and all(all(idx < len(item) and item[idx] != "" for idx in active) for item in window):
+                    data_start = candidate + 1
+                    break
+            inferred.append({
+                "row": row_idx + 1,
+                "header": label,
+                "data_start": data_start,
+                "fields": [{"index": idx, "label": field} for idx, field in zip(active, fields)],
+            })
+    return inferred[:8]
+
 sheets = []
 if ext == ".xls":
     import xlrd
     book = xlrd.open_workbook(filepath)
     for sheet in book.sheets()[:5]:
         preview = []
-        for row_idx in range(min(sheet.nrows, limit_rows)):
+        for row_idx in range(start_row, min(sheet.nrows, start_row + limit_rows)):
             preview.append([clean(sheet.cell_value(row_idx, col_idx)) for col_idx in range(min(sheet.ncols, limit_cols))])
-        sheets.append({"name": sheet.name, "rows": sheet.nrows, "columns": sheet.ncols, "preview": preview})
+        candidates = []
+        scanned = []
+        for row_idx in range(min(sheet.nrows, landmark_scan_rows)):
+            values = [clean(sheet.cell_value(row_idx, col_idx)) for col_idx in range(min(sheet.ncols, limit_cols))]
+            scanned.append(values)
+            score = sum(1 for value in values if value != "")
+            if score >= 2:
+                candidates.append((score, row_idx, values))
+        landmarks = [
+            {"row": row_idx + 1, "values": values}
+            for score, row_idx, values in sorted(candidates, key=lambda item: (-item[0], item[1]))[:landmark_limit]
+        ]
+        profiles = column_profiles(scanned, sheet.ncols)
+        sheets.append({"name": sheet.name, "rows": sheet.nrows, "columns": sheet.ncols, "row_start": start_row + 1, "preview": preview, "landmarks": landmarks, "profiles": profiles, "inferred": infer_subcolumns(scanned, profiles)})
 else:
     import openpyxl
     book = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
@@ -233,47 +310,64 @@ else:
         preview = []
         max_row = sheet.max_row or 0
         max_col = sheet.max_column or 0
-        for row in sheet.iter_rows(min_row=1, max_row=min(max_row, limit_rows), max_col=min(max_col, limit_cols), values_only=True):
-            preview.append([clean(value) for value in row])
-        sheets.append({"name": sheet.title, "rows": max_row, "columns": max_col, "preview": preview})
+        if start_row < max_row:
+            for row in sheet.iter_rows(min_row=start_row + 1, max_row=min(max_row, start_row + limit_rows), max_col=min(max_col, limit_cols), values_only=True):
+                preview.append([clean(value) for value in row])
+        candidates = []
+        scanned = []
+        for row_idx, row in enumerate(sheet.iter_rows(min_row=1, max_row=min(max_row, landmark_scan_rows), max_col=min(max_col, limit_cols), values_only=True)):
+            values = [clean(value) for value in row]
+            scanned.append(values)
+            score = sum(1 for value in values if value != "")
+            if score >= 2:
+                candidates.append((score, row_idx, values))
+        landmarks = [
+            {"row": row_idx + 1, "values": values}
+            for score, row_idx, values in sorted(candidates, key=lambda item: (-item[0], item[1]))[:landmark_limit]
+        ]
+        profiles = column_profiles(scanned, max_col)
+        sheets.append({"name": sheet.title, "rows": max_row, "columns": max_col, "row_start": start_row + 1, "preview": preview, "landmarks": landmarks, "profiles": profiles, "inferred": infer_subcolumns(scanned, profiles)})
 
 print(json.dumps({"sheets": sheets}, ensure_ascii=False))
 `
       const commands = process.platform === "win32" ? [["py", "-3"], ["python"]] : [["python3"], ["python"]]
 
+      const failures: string[] = []
       for (const command of commands) {
-        const result = yield* Effect.tryPromise({
-          try: async () => {
-            const proc = Bun.spawn([...command, "-c", script, filepath], {
-              env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-              stdout: "pipe",
-              stderr: "pipe",
-            })
-            const [stdout, stderr, code] = await Promise.all([
-              new Response(proc.stdout).text(),
-              new Response(proc.stderr).text(),
-              proc.exited,
-            ])
-            return { stdout, stderr, code, command: command.join(" ") }
-          },
-          catch: (error) => (error instanceof Error ? error.message : String(error)),
-        }).pipe(
-          Effect.catch((error) =>
-            Effect.succeed({
-              stdout: "",
-              stderr: error,
-              code: 1,
-              command: command.join(" "),
+        const result = yield* Effect.promise(
+          () =>
+            new Promise<{ stdout: string; stderr: string; code: number; command: string }>((resolve) => {
+              execFile(
+                command[0],
+                [...command.slice(1), "-c", script, filepath, String(opts.offset), String(opts.limit)],
+                {
+                  env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+                  encoding: "utf8",
+                  maxBuffer: 10 * 1024 * 1024,
+                  windowsHide: true,
+                },
+                (error, stdout, stderr) =>
+                  resolve({
+                    stdout,
+                    stderr: stderr || error?.message || "",
+                    code: typeof error?.code === "number" ? error.code : error ? 1 : 0,
+                    command: command.join(" "),
+                  }),
+              )
             }),
-          ),
         )
 
         if (result.code === 0 && result.stdout.trim()) {
           return { ok: true as const, text: result.stdout.trim() }
         }
+        const detail = result.stderr.trim().split(/\r?\n/).at(-1) || `exit code ${result.code}`
+        failures.push(`${result.command}: ${detail}`)
       }
 
-      return { ok: false as const, text: "Python spreadsheet parser is unavailable or could not open this file." }
+      return {
+        ok: false as const,
+        text: `Python spreadsheet parser is unavailable or could not open this file. Attempts: ${failures.join("; ")}`,
+      }
     })
 
     const spreadsheetOutput = (
@@ -286,7 +380,21 @@ print(json.dumps({"sheets": sheets}, ensure_ascii=False))
       if (inspection.ok) {
         try {
           const parsed = JSON.parse(inspection.text) as {
-            sheets?: Array<{ name?: string; rows?: number; columns?: number; preview?: unknown[][] }>
+            sheets?: Array<{
+              name?: string
+              rows?: number
+              columns?: number
+              row_start?: number
+              preview?: unknown[][]
+              landmarks?: Array<{ row?: number; values?: unknown[] }>
+              profiles?: Array<{ index?: number; non_empty?: number; samples?: unknown[] }>
+              inferred?: Array<{
+                row?: number
+                header?: string
+                data_start?: number
+                fields?: Array<{ index?: number; label?: string }>
+              }>
+            }>
           }
           const sheets = parsed.sheets ?? []
           if (sheets.length === 0) content.push("No sheets were found.")
@@ -294,9 +402,55 @@ print(json.dumps({"sheets": sheets}, ensure_ascii=False))
             content.push(`Sheet: ${sheet.name ?? "(unnamed)"}`)
             content.push(`Rows: ${sheet.rows ?? 0}`)
             content.push(`Columns: ${sheet.columns ?? 0}`)
+            if ((sheet.profiles?.length ?? 0) > 0) {
+              content.push("Column profiles (zero-based indexes; scanned first 500 workbook rows):")
+              for (const profile of sheet.profiles ?? []) {
+                content.push(
+                  `${profile.index ?? "?"}: non-empty=${profile.non_empty ?? 0}, samples=${JSON.stringify(profile.samples ?? [])}`,
+                )
+              }
+              content.push(
+                "Identify physical data columns from these indexed samples. A merged header may label several columns and is not proof that its leftmost column contains every described value.",
+              )
+            }
+            if ((sheet.inferred?.length ?? 0) > 0) {
+              content.push("Inferred physical columns from spanning compound headers:")
+              for (const inferred of sheet.inferred ?? []) {
+                const fields = (inferred.fields ?? [])
+                  .map((field) => `index ${field.index ?? "?"} = ${JSON.stringify(field.label ?? "")}`)
+                  .join("; ")
+                const data = inferred.data_start
+                  ? `; stable data rows start at workbook row ${inferred.data_start}`
+                  : ""
+                content.push(
+                  `Workbook row ${inferred.row ?? "?"}, ${JSON.stringify(inferred.header ?? "")}: ${fields}${data}`,
+                )
+                if (inferred.data_start) {
+                  for (const field of inferred.fields ?? []) {
+                    content.push(
+                      `Pandas selection for ${JSON.stringify(field.label ?? "")}: read with header=None, then use df.iloc[${inferred.data_start - 1}:, ${field.index ?? 0}]. Do not include earlier rows.`,
+                    )
+                  }
+                }
+              }
+            }
+            if ((sheet.landmarks?.length ?? 0) > 0) {
+              content.push(
+                "Structure landmarks (original workbook row numbers; array positions use the zero-based column indexes above):",
+              )
+              for (const landmark of sheet.landmarks ?? []) {
+                content.push(`${landmark.row ?? "?"}: ${JSON.stringify(landmark.values ?? [])}`)
+              }
+              content.push("Use the displayed workbook row number as offset to inspect that region.")
+            }
             content.push("Preview:")
+            const rowStart = sheet.row_start ?? 1
             for (const [index, row] of (sheet.preview ?? []).entries()) {
-              content.push(`${index + 1}: ${JSON.stringify(row)}`)
+              content.push(`${rowStart + index}: ${JSON.stringify(row)}`)
+            }
+            const rowEnd = rowStart + (sheet.preview?.length ?? 0) - 1
+            if (rowEnd < (sheet.rows ?? 0)) {
+              content.push(`More rows are available. Call read again with offset=${rowEnd + 1}.`)
             }
             content.push("")
           }
@@ -461,7 +615,9 @@ print(json.dumps({"sheets": sheets}, ensure_ascii=False))
       }
 
       if (isSpreadsheet(filepath)) {
-        const inspection = yield* inspectSpreadsheet(filepath)
+        const offset = Math.max(1, params.offset ?? 1)
+        const limit = Math.max(1, Math.min(MAX_SPREADSHEET_LIMIT, params.limit ?? DEFAULT_SPREADSHEET_LIMIT))
+        const inspection = yield* inspectSpreadsheet(filepath, { offset, limit })
         const output = spreadsheetOutput(filepath, inspection)
 
         return {
@@ -469,7 +625,7 @@ print(json.dumps({"sheets": sheets}, ensure_ascii=False))
           output,
           metadata: {
             preview: inspection.ok ? "Spreadsheet preview loaded" : "Spreadsheet preview unavailable",
-            truncated: false,
+            truncated: inspection.ok && output.includes("More rows are available."),
             loaded: loaded.map((item) => item.filepath),
           },
         }

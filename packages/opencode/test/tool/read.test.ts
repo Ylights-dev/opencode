@@ -593,6 +593,8 @@ describe("tool.read binary detection", () => {
       const result = yield* exec(dir, { filePath: path.join(dir, "report.xls") })
       expect(result.output).toContain("<type>spreadsheet</type>")
       expect(result.output).toContain("To transform or write spreadsheet data")
+      expect(result.output).toContain("Attempts:")
+      expect(result.output).not.toContain("Bun is not defined")
       expect(["Spreadsheet preview loaded", "Spreadsheet preview unavailable"]).toContain(result.metadata.preview)
     }),
   )

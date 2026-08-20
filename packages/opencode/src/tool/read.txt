@@ -13,5 +13,6 @@ Usage:
 - Avoid tiny repeated slices (30 line chunks). If you need more context, read a larger window.
 - This tool can read image files and PDFs and return them as file attachments.
 - This tool can preview Excel spreadsheets (.xls, .xlsx, .xlsm): sheet names, dimensions, and the first rows.
+- Spreadsheet previews include zero-based column profiles. Use their sample values to identify physical columns because merged headers may span multiple columns.
 - Do not use this tool to edit or transform spreadsheets. After previewing the structure, use the shell tool with Python or another spreadsheet-aware parser/writer.
 - Do not use this tool to inspect Word/PowerPoint/OpenDocument contents. For .docx, .pptx, .ods and similar structured documents, use the shell tool with an appropriate parser or converter instead.

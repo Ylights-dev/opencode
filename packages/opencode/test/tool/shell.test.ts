@@ -237,6 +237,34 @@ describe("tool.shell", () => {
         }),
       ),
     )
+
+    it.live(`preserves unicode in PowerShell parser errors [${item.label}]`, () =>
+      withShell(
+        item,
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const result = yield* run({ command: "Write-Output 'проверка'; 1 +" })
+            expect(result.metadata.exit).not.toBe(0)
+            expect(result.output).toContain("проверка")
+            expect(result.output).not.toContain("�")
+          }),
+        ),
+      ),
+    )
+
+    it.live(`preserves native command exit codes through PowerShell wrapper [${item.label}]`, () =>
+      withShell(
+        item,
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const result = yield* run({ command: "cmd.exe /d /c exit 37" })
+            expect(result.metadata.exit).toBe(37)
+          }),
+        ),
+      ),
+    )
   }
 })
 
@@ -1133,7 +1161,10 @@ describe("tool.shell abort", () => {
         const updates: string[] = []
         const result = yield* run(
           {
-            command: `echo first && sleep 0.1 && echo second`,
+            command:
+              process.platform === "win32"
+                ? `Write-Output first; Start-Sleep -Milliseconds 100; Write-Output second`
+                : `echo first && sleep 0.1 && echo second`,
           },
           {
             ...ctx,

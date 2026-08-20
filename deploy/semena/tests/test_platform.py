@@ -35,9 +35,9 @@ class ClientConfigTests(unittest.TestCase):
         self.assertEqual(self.config["enabled_providers"], ["semena"])
         self.assertEqual(self.config["model"], "semena/semena-gemma4")
 
-    def test_agent_can_run_scripts_and_use_tools(self) -> None:
+    def test_agent_can_choose_tools_and_shell_is_fallback(self) -> None:
         permission = self.config["permission"]
-        self.assertEqual(permission["external_directory"], "allow")
+        self.assertEqual(permission["external_directory"], "ask")
         self.assertEqual(permission["bash"], "allow")
         for tool in ["edit", "glob", "grep", "list", "task", "todowrite", "lsp", "skill", "webfetch", "websearch", "read", "write"]:
             self.assertEqual(permission[tool], "allow", tool)
@@ -110,6 +110,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("Install-AgentPython", embedded)
         self.assertIn("openpyxl", embedded)
         self.assertIn("xlrd", embedded)
+        self.assertIn('import openpyxl, xlrd', embedded)
+        self.assertIn("(Join-Path $configRoot 'AGENTS.md')", embedded)
         self.assertNotIn("Invoke-WebRequest", embedded)
         self.assertIn("Invoke-RestMethod -Method Post", embedded)
 
@@ -136,15 +138,62 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("OPENCODE_ENABLE_PARALLEL", sidecar)
         self.assertIn('OPENCODE_WEBSEARCH_PROVIDER: process.env.OPENCODE_WEBSEARCH_PROVIDER ?? "parallel"', sidecar)
         self.assertIn('process.env.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS ?? "3600000"', sidecar)
+        self.assertIn('PYTHONIOENCODING: process.env.PYTHONIOENCODING ?? "utf-8"', sidecar)
+        self.assertIn('PYTHONUTF8: process.env.PYTHONUTF8 ?? "1"', sidecar)
 
-    def test_agent_instructions_cover_windows_excel_registry_workflow(self) -> None:
+    def test_agent_instructions_define_general_tool_selection_policy(self) -> None:
         instructions = (ROOT / "client" / "Служебные файлы" / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertIn("Не выбирай самый большой файл", instructions)
-        self.assertIn("@' ... '@ | py -3 -", instructions)
-        self.assertIn("Госсорткомиссии `gossortrf.ru`", instructions)
-        self.assertIn("arrFilter_pf[CULTURE_NAME]", instructions)
-        self.assertIn("Thinking Process", instructions)
-        self.assertIn("Никогда не выводи служебные маркеры", instructions)
+        self.assertIn("Сам выбирай подходящие инструменты по цели пользователя", instructions)
+        self.assertIn("Не выдавай план или намерение за сделанную работу", instructions)
+        self.assertIn("повторно открой результат", instructions)
+        self.assertIn("Код возврата `0`", instructions)
+        self.assertIn("символ `#` комментирует весь остаток строки", instructions)
+        self.assertIn("проверь размер таблицы", instructions)
+
+    def test_semena_provider_uses_general_system_tool_policy(self) -> None:
+        system = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "system.ts").read_text(
+            encoding="utf-8"
+        )
+        request = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "llm" / "request.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('model.providerID === "semena"', system)
+        self.assertIn("full descriptions", system)
+        self.assertIn('return [PROMPT_SEMENA, PROMPT_DEFAULT]', system)
+        self.assertIn("SEMENA_TOOL_ALLOWLIST", request)
+        self.assertNotIn("compactTools", request)
+
+    def test_spreadsheet_read_supports_generic_structure_discovery(self) -> None:
+        read_tool = (ROOT.parents[1] / "packages" / "opencode" / "src" / "tool" / "read.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("DEFAULT_SPREADSHEET_LIMIT", read_tool)
+        self.assertIn("start_row = offset - 1", read_tool)
+        self.assertIn("Structure landmarks (original workbook row numbers", read_tool)
+        self.assertIn("Column profiles (zero-based indexes", read_tool)
+        self.assertIn("A merged header may label several columns", read_tool)
+        self.assertIn("infer_subcolumns", read_tool)
+        self.assertIn("Inferred physical columns from spanning compound headers", read_tool)
+        self.assertIn("stable data rows start at workbook row", read_tool)
+        self.assertIn("Pandas selection for", read_tool)
+        self.assertIn("Use the displayed workbook row number as offset", read_tool)
+        self.assertIn("Attempts: ${failures.join", read_tool)
+        self.assertIn('from "node:child_process"', read_tool)
+        self.assertNotIn("Bun.spawn", read_tool)
+
+    def test_semena_uses_the_upstream_completion_loop(self) -> None:
+        prompt = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "prompt.ts").read_text(
+            encoding="utf-8"
+        )
+        tools = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "tools.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("forceTaskCompletion", prompt)
+        self.assertNotIn('toolChoice: format.type === "json_schema" ||', prompt)
+        self.assertNotIn("tools.finish_task", tools)
+        self.assertIn("SEMENA_TOOL_ERROR_RECOVERY_PROMPT", prompt)
+        self.assertIn("SEMENA_MUTATION_AUDIT_PROMPT", prompt)
+        self.assertIn("mutationAudits < 1", prompt)
 
     def test_desktop_keeps_upstream_opencode_prompt_loop(self) -> None:
         prompt = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "prompt.ts").read_text(
@@ -179,9 +228,10 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("openssl rand", bootstrap)
 
     def test_model_has_required_context(self) -> None:
-        modelfile = (ROOT / "models" / "qwen35.Modelfile").read_text(encoding="utf-8")
-        self.assertIn("FROM qwen3.5:9b", modelfile)
-        self.assertIn("PARAMETER num_ctx 16384", modelfile)
+        modelfile = (ROOT / "models" / "gemma4.Modelfile").read_text(encoding="utf-8")
+        self.assertIn("FROM gemma4:12b", modelfile)
+        self.assertIn("PARAMETER num_ctx 32768", modelfile)
+        self.assertIn("PARAMETER temperature 0.2", modelfile)
 
     def test_ca_has_explicit_signing_extensions(self) -> None:
         script = (ROOT / "scripts" / "generate_tls.sh").read_text(encoding="utf-8")
