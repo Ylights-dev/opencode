@@ -83,9 +83,16 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 const SEMENA_TOOL_ERROR_RECOVERY_PROMPT = `The most recent tool call failed. Its error is authoritative: the requested action was not completed by that call. Diagnose the error, retry with a corrected tool call, and verify the actual result. Do not repeat the previous success claim. If recovery is impossible, report the failure accurately.`
 const SEMENA_MUTATION_AUDIT_PROMPT = `Audit the evidence before answering. If the task created or changed an artifact, call an appropriate read-only tool now to inspect the exact resulting artifact and compare its contents with the user's request. Use structural evidence already reported by tools, including inferred physical columns and stable data starts; values from pre-data header rows are verification failures. Correct a failed check instead of reporting success. Do not present example verification code as if it ran. If the latest shell call was only observational, answer from its actual output.`
+const SEMENA_ACTION_INTEGRITY_PROMPT = `Do not end this turn with a promise to start, continue, or perform the requested work later. The previous answer claimed or deferred an external action without tool evidence. Use the appropriate tool now and complete a verifiable unit of work. If the action cannot be performed, state the concrete blocker and the observed evidence accurately; do not claim progress or completion.`
 const SEMENA_MUTATION_TOOLS = new Set(["edit", "write", "apply_patch"])
 const SEMENA_SHELL_MUTATION_PATTERN =
-  /(?:^|[\s;|])(?:set-content|add-content|out-file|copy-item|move-item|remove-item|new-item)\b|(?:^|\s)(?:>|>>)(?:\s|$)|\.(?:to_excel|to_csv|to_json|write_text|write_bytes|save)\s*\(|\bopen\s*\([^)]*,\s*["'][wax]/i
+  /(?:^|[\s;|])(?:set-content|add-content|out-file|copy-item|move-item|remove-item|new-item|rename-item)\b|(?:^|\s)(?:>|>>)(?:\s|$)|\.(?:to_excel|to_csv|to_json|write_text|write_bytes|save)\s*\(|\b(?:open|replace|rename|move|copy|copyfile)\s*\([^)]*,\s*["'][wax]?/i
+const SEMENA_DEFERRED_ACTION_PATTERN =
+  /(?:^|[\s.,;:!?])(?:приступаю|начинаю|продолжаю|возобновляю|буду\s+(?:делать|искать|обрабатывать|записывать|заполнять|вносить|изменять|проверять|работать)|сейчас\s+(?:начну|сделаю|обработаю|запишу|заполню|внесу|изменю|проверю))|\b(?:i\s+will|i'll|i\s+am\s+(?:starting|continuing)|let\s+me\s+(?:start|continue))\b/i
+const SEMENA_UNSUPPORTED_ARTIFACT_CLAIM_PATTERN =
+  /(?:(?:обновил|изменила?|записала?|создала?|сохранила?|заполнила?|обработала?|вн[её]с(?:ла)?|updated|changed|wrote|created|saved|filled|processed).{0,100}(?:файл|таблиц|документ|строк|данн|file|spreadsheet|document|rows?|data))|(?:(?:файл|таблиц|документ|строк|данн|file|spreadsheet|document|rows?|data).{0,100}(?:обновл[её]н|измен[её]н|записан|создан|сохран[её]н|заполнен|обработан|updated|changed|written|created|saved|filled|processed))/is
+const SEMENA_NEGATED_ARTIFACT_STATE_PATTERN =
+  /(?:не|not|did\s+not|was\s+not|were\s+not)\s+(?:обновил|изменила?|записала?|создала?|сохранила?|заполнила?|обработала?|вн[её]с(?:ла)?|обновл[её]н|измен[её]н|записан|создан|сохран[её]н|заполнен|обработан|updated|changed|wrote|written|created|saved|filled|processed)/gi
 
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
@@ -127,8 +134,8 @@ export function needsMutationAudit(messages: readonly SessionV1.WithParts[], use
   const isMutation = (part: SessionV1.ToolPart) => {
     if (part.state.status !== "completed") return false
     if (SEMENA_MUTATION_TOOLS.has(part.tool)) return true
-    if (part.tool !== "bash") return false
-    const command = part.state.input.command
+    if (part.tool !== "bash" && part.tool !== "python") return false
+    const command = part.tool === "python" ? part.state.input.script : part.state.input.command
     return typeof command === "string" && SEMENA_SHELL_MUTATION_PATTERN.test(command)
   }
 
@@ -138,10 +145,38 @@ export function needsMutationAudit(messages: readonly SessionV1.WithParts[], use
   return !tools.slice(mutation + 1).some((part) => {
     if (part.state.status !== "completed") return false
     if (["read", "grep", "lsp"].includes(part.tool)) return true
-    if (part.tool !== "bash") return false
-    const command = part.state.input.command
+    if (part.tool !== "bash" && part.tool !== "python") return false
+    const command = part.tool === "python" ? part.state.input.script : part.state.input.command
     return typeof command === "string" && !SEMENA_SHELL_MUTATION_PATTERN.test(command)
   })
+}
+
+export function needsActionIntegrityRecovery(messages: readonly SessionV1.WithParts[], userID: string) {
+  const assistants = messages.filter(
+    (message) => message.info.role === "assistant" && message.info.parentID === userID,
+  )
+  const latest = assistants.at(-1)
+  if (!latest) return false
+
+  const text = latest.parts
+    .filter((part): part is SessionV1.TextPart => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+  if (!text.trim()) return false
+  if (SEMENA_DEFERRED_ACTION_PATTERN.test(text)) return true
+
+  const completedMutation = assistants
+    .flatMap((message) => message.parts)
+    .some((part) => {
+      if (part.type !== "tool" || part.state.status !== "completed") return false
+      if (SEMENA_MUTATION_TOOLS.has(part.tool)) return true
+      if (part.tool !== "bash" && part.tool !== "python") return false
+      const command = part.tool === "python" ? part.state.input.script : part.state.input.command
+      return typeof command === "string" && SEMENA_SHELL_MUTATION_PATTERN.test(command)
+    })
+
+  const positiveClaims = text.replace(SEMENA_NEGATED_ARTIFACT_STATE_PATTERN, "")
+  return !completedMutation && SEMENA_UNSUPPORTED_ARTIFACT_CLAIM_PATTERN.test(positiveClaims)
 }
 
 export interface Interface {
@@ -1132,6 +1167,8 @@ const layer = Layer.effect(
         let toolErrorRecovery = false
         let mutationAudits = 0
         let mutationAudit = false
+        let actionIntegrityRecoveries = 0
+        let actionIntegrityRecovery = false
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1164,7 +1201,7 @@ const layer = Layer.effect(
           ) {
             const recoverToolError =
               lastUser.model.providerID === "semena" &&
-              toolErrorRecoveries < 1 &&
+              toolErrorRecoveries < 2 &&
               hasUnresolvedToolError(msgs, lastUser.id)
             if (recoverToolError) {
               toolErrorRecoveries += 1
@@ -1175,7 +1212,18 @@ const layer = Layer.effect(
               })
             } else if (
               lastUser.model.providerID === "semena" &&
-              mutationAudits < 1 &&
+              actionIntegrityRecoveries < 2 &&
+              needsActionIntegrityRecovery(msgs, lastUser.id)
+            ) {
+              actionIntegrityRecoveries += 1
+              actionIntegrityRecovery = true
+              yield* Effect.logWarning("recovering semena turn after unsupported action claim", {
+                "session.id": sessionID,
+                messageID: lastAssistant.id,
+              })
+            } else if (
+              lastUser.model.providerID === "semena" &&
+              mutationAudits < 3 &&
               needsMutationAudit(msgs, lastUser.id)
             ) {
               mutationAudits += 1
@@ -1348,6 +1396,10 @@ const layer = Layer.effect(
             if (mutationAudit) {
               system.push(SEMENA_MUTATION_AUDIT_PROMPT)
               mutationAudit = false
+            }
+            if (actionIntegrityRecovery) {
+              system.push(SEMENA_ACTION_INTEGRITY_PROMPT)
+              actionIntegrityRecovery = false
             }
             const result = yield* handle.process({
               user: lastUser,

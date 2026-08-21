@@ -846,6 +846,14 @@ describe("ProviderTransform.options - semena local model", () => {
             description: "Run a shell command",
             inputSchema: jsonSchema({ type: "object", properties: {} }),
           },
+          python: {
+            description: "Run Python source through standard input",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+          task: {
+            description: "Run a subagent",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
           "1c-assistant_bitrix_get_tasks": {
             description: "External MCP tool",
             inputSchema: jsonSchema({ type: "object", properties: {} }),
@@ -866,7 +874,7 @@ describe("ProviderTransform.options - semena local model", () => {
         isWorkflow: false,
       }),
     )
-    expect(Object.keys(result.tools).sort()).toEqual(["bash", "read"])
+    expect(Object.keys(result.tools).sort()).toEqual(["bash", "python", "read"])
   })
 
   test("preserves Semena tool descriptions and parameter guidance", async () => {

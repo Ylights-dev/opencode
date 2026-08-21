@@ -138,6 +138,10 @@ Import-Certificate -FilePath $certificateSource -CertStoreLocation 'Cert:\Curren
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 if (-not $ApiKey) {
+    $ApiKey = [Environment]::GetEnvironmentVariable('SEMENA_AGENT_API_KEY', 'User')
+}
+
+if (-not $ApiKey) {
     $email = (Read-Host 'Введите e-mail от корпоративной веб-панели').Trim().ToLowerInvariant()
     if ($email -notmatch '^[^@\s]+@[^@\s]+$') {
         throw 'Введите корректный e-mail.'

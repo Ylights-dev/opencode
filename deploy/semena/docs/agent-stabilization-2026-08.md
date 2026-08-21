@@ -189,3 +189,65 @@ unrelated to model execution.
   telemetry so future regressions are visible without reading the UI transcript.
 - Evaluate larger local models only against the same benchmark and hardware
   limits; do not switch based on model-card claims alone.
+
+## 2026-08-21: action integrity and reliable Python execution
+
+The latest failed production conversation was inspected directly as session
+`ses_fe03a778bffewnp7GgVdkXnvF8`. The agent emitted progress claims for batches
+through row 140 and then stopped at "starting the next batch", despite having no
+successful mutation tool call. Independent inspection of
+`Сорта_и_культуры.xlsx` found 1232 rows and zero populated cells in both target
+columns. The old conversation therefore made no real progress.
+
+This was fixed at the general agent-loop boundary rather than with an Excel
+workflow. Semena now rejects a final response that merely promises future work
+or claims an artifact mutation without a completed mutation tool. A mutation
+still requires a later, independent read-only observation before success may be
+reported. Recovery is bounded to two tool-error retries, two action-integrity
+retries, and three mutation-audit retries. These invariants apply to files,
+spreadsheets, documents, code, and other tool-driven work.
+
+A dedicated `python` tool now sends multiline source over stdin in UTF-8 and
+reports the real process exit code. This avoids the PowerShell `py -c` quoting
+and encoding failure seen in the Excel session. Non-zero exits are converted by
+the standard OpenCode tool adapter into tool errors. The tool is exposed only to
+the Semena provider. The `task` tool was removed from the Semena allowlist, so
+the product continues to use one agent without hidden subagent delegation.
+
+The one-file installer now reuses the existing user-level
+`SEMENA_AGENT_API_KEY` during reinstall. This fixed the unattended installer
+waiting on an invisible credential prompt. The rebuilt installer completed a
+local reinstall with exit code 0, and the installed `app.asar` contains version
+`0.0.0-prod-202608211421`.
+
+A live run through the real `semena-gemma4` gateway, session
+`ses_fdcc06894ffeOwMjExdcB4fq2O`, selected `python`, created a UTF-8 file with
+three requested Russian lines, independently reopened it with `read`, and only
+then returned success. Host verification found exactly three lines and SHA-256
+`0758B341FC853DA0208D2856FAA29EF976DAE533A058DFC4BB7A9342BB0E7860`.
+
+Verification results:
+
+```text
+Focused OpenCode tests:                       424 passed
+OpenCode TypeScript typecheck:                 passed
+Semena deployment pytest suite:                32 passed
+git diff --check:                              passed
+```
+
+The full OpenCode suite reported 3285 passes and eight unrelated Windows-only
+failures: seven symlink tests lacked Windows Developer Mode/privilege, and one
+pre-existing formatter expectation (`xAB` versus `x`) also failed when rerun in
+isolation.
+
+Published and downloaded back through the public HTTP endpoint:
+
+```text
+Semena-Agent-Setup-x64.exe
+Size:    159334934 bytes
+SHA-256: C704FE7E340BEEC5851D8B3DD2AA0FF35E7A4749CCE1DCA190A802A978596A26
+
+SemenaOpenCodeSetup.zip
+Size:    159368290 bytes
+SHA-256: DCCCD52C9317A1E34A783385F67CC6B2A29FEA1CE7A7D2E06F0F93B524CDD914
+```

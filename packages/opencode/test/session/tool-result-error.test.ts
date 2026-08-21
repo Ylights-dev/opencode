@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { toolResultError } from "../../src/session/tools"
-import { hasUnresolvedToolError, needsMutationAudit } from "../../src/session/prompt"
+import { hasUnresolvedToolError, needsActionIntegrityRecovery, needsMutationAudit } from "../../src/session/prompt"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 
 describe("toolResultError", () => {
@@ -50,6 +50,22 @@ describe("hasUnresolvedToolError", () => {
     expect(needsMutationAudit(messages(["completed"], "df.to_excel('result.xlsx')"), "user-1")).toBe(true)
   })
 
+  test("audits a spreadsheet write through the dedicated Python tool", () => {
+    const input = [
+      {
+        info: { role: "assistant", parentID: "user-1" },
+        parts: [
+          {
+            type: "tool",
+            tool: "python",
+            state: { status: "completed", input: { script: "df.to_excel('result.xlsx')" } },
+          },
+        ],
+      },
+    ] as unknown as SessionV1.WithParts[]
+    expect(needsMutationAudit(input, "user-1")).toBe(true)
+  })
+
   test("does not let a skill call satisfy a pending mutation audit", () => {
     const input = [
       {
@@ -76,5 +92,58 @@ describe("hasUnresolvedToolError", () => {
     ] as unknown as SessionV1.WithParts[]
 
     expect(needsMutationAudit(input, "user-1")).toBe(false)
+  })
+
+  test("accepts an observational Python check after a Python mutation", () => {
+    const input = [
+      {
+        info: { role: "assistant", parentID: "user-1" },
+        parts: [
+          {
+            type: "tool",
+            tool: "python",
+            state: { status: "completed", input: { script: "df.to_excel('result.xlsx')" } },
+          },
+          {
+            type: "tool",
+            tool: "python",
+            state: { status: "completed", input: { script: "print(pd.read_excel('result.xlsx').shape)" } },
+          },
+        ],
+      },
+    ] as unknown as SessionV1.WithParts[]
+
+    expect(needsMutationAudit(input, "user-1")).toBe(false)
+  })
+})
+
+describe("needsActionIntegrityRecovery", () => {
+  const turn = (text: string, tools: unknown[] = []) =>
+    [
+      {
+        info: { role: "assistant", parentID: "user-1" },
+        parts: [...tools, { type: "text", text }],
+      },
+    ] as unknown as SessionV1.WithParts[]
+
+  test("rejects deferring requested work without using a tool", () => {
+    expect(needsActionIntegrityRecovery(turn("Приступаю к обработке следующей партии."), "user-1")).toBe(true)
+    expect(needsActionIntegrityRecovery(turn("I will update the spreadsheet now."), "user-1")).toBe(true)
+  })
+
+  test("rejects an artifact completion claim without a completed mutation", () => {
+    expect(needsActionIntegrityRecovery(turn("Я обновил файл и обработал 140 строк."), "user-1")).toBe(true)
+  })
+
+  test("accepts an honest blocker and conceptual answers", () => {
+    expect(needsActionIntegrityRecovery(turn("Команда завершилась с ошибкой; файл не изменён."), "user-1")).toBe(false)
+    expect(needsActionIntegrityRecovery(turn("Для этого лучше использовать пакетную обработку."), "user-1")).toBe(false)
+  })
+
+  test("accepts an artifact claim backed by a completed mutation", () => {
+    const tools = [
+      { type: "tool", tool: "write", state: { status: "completed", input: { filePath: "result.txt" } } },
+    ]
+    expect(needsActionIntegrityRecovery(turn("Я обновил файл.", tools), "user-1")).toBe(false)
   })
 })

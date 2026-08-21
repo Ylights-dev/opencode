@@ -82,6 +82,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("Invoke-RestMethod -Method Post", installer)
         self.assertNotIn("Enter your", installer)
         self.assertIn("SEMENA_AGENT_API_KEY", installer)
+        self.assertIn("GetEnvironmentVariable('SEMENA_AGENT_API_KEY', 'User')", installer)
         self.assertIn("автоматически привязано", installer)
 
     def test_client_support_directory_only_contains_embedded_data(self) -> None:
@@ -211,7 +212,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn("tools.finish_task", tools)
         self.assertIn("SEMENA_TOOL_ERROR_RECOVERY_PROMPT", prompt)
         self.assertIn("SEMENA_MUTATION_AUDIT_PROMPT", prompt)
-        self.assertIn("mutationAudits < 1", prompt)
+        self.assertIn("SEMENA_ACTION_INTEGRITY_PROMPT", prompt)
+        self.assertIn("mutationAudits < 3", prompt)
 
     def test_desktop_keeps_upstream_opencode_prompt_loop(self) -> None:
         prompt = (ROOT.parents[1] / "packages" / "opencode" / "src" / "session" / "prompt.ts").read_text(
