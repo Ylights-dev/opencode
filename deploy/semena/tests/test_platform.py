@@ -46,6 +46,7 @@ class ClientConfigTests(unittest.TestCase):
         for tool in ["edit", "glob", "grep", "list", "task", "todowrite", "lsp", "skill", "webfetch", "websearch", "read", "write"]:
             self.assertEqual(permission[tool], "allow", tool)
         self.assertEqual(permission["semena_1c_onec_*"], "allow")
+        self.assertEqual(permission["semena_image_image_*"], "allow")
         self.assertNotIn("instructions", self.config)
 
     def test_client_connects_existing_1c_mcp_server(self) -> None:
@@ -55,6 +56,14 @@ class ClientConfigTests(unittest.TestCase):
         self.assertTrue(mcp["enabled"])
         self.assertFalse(mcp["oauth"])
         self.assertEqual(mcp["timeout"], 45000)
+
+    def test_client_connects_image_edit_mcp_server(self) -> None:
+        mcp = self.config["mcp"]["semena_image"]
+        self.assertEqual(mcp["type"], "remote")
+        self.assertEqual(mcp["url"], "http://10.1.50.101:3003/sse")
+        self.assertTrue(mcp["enabled"])
+        self.assertFalse(mcp["oauth"])
+        self.assertEqual(mcp["timeout"], 300000)
 
 
 class DeploymentTests(unittest.TestCase):
@@ -78,6 +87,20 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("Conflicts=ollama.service", service)
         self.assertIn("FREETOKEN_PORT=1919", service)
         self.assertEqual(config["mcp"]["semena_1c"]["url"], "http://10.1.50.101:3001/sse")
+        self.assertEqual(config["mcp"]["semena_image"]["url"], "http://10.1.50.101:3003/sse")
+
+    def test_image_edit_mcp_service_is_qwen_2511_local(self) -> None:
+        root = ROOT / "image-mcp"
+        server = (root / "server.py").read_text(encoding="utf-8")
+        compose = (root / "compose.gpu.yaml").read_text(encoding="utf-8")
+        requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+
+        self.assertIn("Qwen/Qwen-Image-Edit-2511", server)
+        self.assertIn("QwenImageEditPlusPipeline", server)
+        self.assertIn("SEMENA_IMAGE_DRY_RUN", server)
+        self.assertIn("3003:3003", compose)
+        self.assertIn("capabilities: [gpu]", compose)
+        self.assertIn("diffusers==0.36.0", requirements)
 
     def test_gateway_routes_production_traffic_to_freetoken(self) -> None:
         nginx = (ROOT / "nginx.conf").read_text(encoding="utf-8")
@@ -216,7 +239,9 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn('return [PROMPT_SEMENA, PROMPT_DEFAULT]', system)
         self.assertIn("SEMENA_TOOL_ALLOWLIST", request)
         self.assertIn('tool.startsWith("semena_1c_onec_")', request)
+        self.assertIn('tool.startsWith("semena_image_image_")', request)
         self.assertNotIn('tool.startsWith("semena_1c_") ||', request)
+        self.assertNotIn('tool.startsWith("semena_image_") ||', request)
         self.assertNotIn("compactTools", request)
 
     def test_semena_automatically_loads_mandatory_verification_skill(self) -> None:

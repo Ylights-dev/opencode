@@ -1,0 +1,9 @@
+mcp>=1.0.0
+starlette>=0.40.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9
+pillow>=10.4.0
+torch>=2.4.0
+transformers>=4.56.0
+accelerate>=1.1.0
+diffusers==0.36.0

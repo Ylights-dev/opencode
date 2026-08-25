@@ -222,7 +222,11 @@ const SEMENA_TOOL_ALLOWLIST = new Set([
 ])
 
 function isSemenaAllowedTool(tool: string) {
-  return SEMENA_TOOL_ALLOWLIST.has(tool) || tool.startsWith("semena_1c_onec_")
+  return (
+    SEMENA_TOOL_ALLOWLIST.has(tool) ||
+    tool.startsWith("semena_1c_onec_") ||
+    tool.startsWith("semena_image_image_")
+  )
 }
 
 function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user" | "model">) {
