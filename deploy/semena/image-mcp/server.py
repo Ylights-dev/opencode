@@ -161,8 +161,9 @@ def _dry_run_edit(image: Image.Image, prompt: str, output_path: Path) -> None:
     edited = image.copy()
     draw = ImageDraw.Draw(edited)
     label = f"DRY RUN: {prompt[:80]}"
-    draw.rectangle((8, 8, min(edited.width - 8, 900), 48), fill=(255, 255, 255))
-    draw.text((16, 18), label, fill=(0, 0, 0))
+    if edited.width >= 32 and edited.height >= 32:
+        draw.rectangle((8, 8, min(edited.width - 8, 900), min(48, edited.height - 8)), fill=(255, 255, 255))
+        draw.text((16, 18), label, fill=(0, 0, 0))
     edited.save(output_path)
 
 

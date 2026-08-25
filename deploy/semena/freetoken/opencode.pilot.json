@@ -13,7 +13,7 @@
     },
     "semena_image": {
       "type": "remote",
-      "url": "http://10.1.50.101:3003/sse",
+      "url": "http://10.1.50.40:3003/sse",
       "enabled": true,
       "oauth": false,
       "timeout": 300000

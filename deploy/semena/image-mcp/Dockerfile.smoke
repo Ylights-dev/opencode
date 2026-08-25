@@ -1,0 +1,18 @@
+FROM mcr.microsoft.com/playwright/python:v1.48.0-noble
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    "mcp>=1.0.0,<2.0.0" \
+    "starlette>=0.40.0" \
+    "uvicorn>=0.30.0" \
+    "python-multipart>=0.0.9" \
+    "pillow>=10.4.0"
+
+COPY server.py .
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=5 \
+  CMD curl -sf http://localhost:3003/health || exit 1
+
+EXPOSE 3003
+CMD ["python", "server.py"]

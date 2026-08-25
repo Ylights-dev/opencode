@@ -15,7 +15,7 @@ services:
       - MAX_IMAGE_SIDE=1536
       - DEFAULT_STEPS=20
       - DEFAULT_GUIDANCE_SCALE=4.0
-      - PUBLIC_BASE_URL=http://10.1.50.101:3003
+      - PUBLIC_BASE_URL=http://10.1.50.40:3003
       - SEMENA_IMAGE_DRY_RUN=${SEMENA_IMAGE_DRY_RUN:-0}
       - HF_HOME=/models/huggingface
     volumes:
