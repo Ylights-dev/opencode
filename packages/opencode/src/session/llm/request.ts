@@ -221,6 +221,10 @@ const SEMENA_TOOL_ALLOWLIST = new Set([
   "write",
 ])
 
+function isSemenaAllowedTool(tool: string) {
+  return SEMENA_TOOL_ALLOWLIST.has(tool) || tool.startsWith("semena_1c_onec_")
+}
+
 function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user" | "model">) {
   const disabled = Permission.disabled(
     Object.keys(input.tools),
@@ -231,7 +235,7 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     (_, k) =>
       input.user.tools?.[k] !== false &&
       !disabled.has(k) &&
-      (input.model.providerID !== "semena" || SEMENA_TOOL_ALLOWLIST.has(k)),
+      (input.model.providerID !== "semena" || isSemenaAllowedTool(k)),
   )
 }
 

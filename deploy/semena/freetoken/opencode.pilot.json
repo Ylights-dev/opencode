@@ -3,6 +3,15 @@
   "enabled_providers": ["semena"],
   "model": "semena/semena-qwen36",
   "small_model": "semena/semena-qwen36",
+  "mcp": {
+    "semena_1c": {
+      "type": "remote",
+      "url": "http://10.1.50.101:3001/sse",
+      "enabled": true,
+      "oauth": false,
+      "timeout": 45000
+    }
+  },
   "provider": {
     "semena": {
       "npm": "@ai-sdk/openai-compatible",
