@@ -1,6 +1,6 @@
 [Unit]
-Description=Restrict direct Ollama access to trusted infrastructure
-After=network-online.target docker.service ollama.service
+Description=Restrict direct local model runtime access to trusted infrastructure
+After=network-online.target docker.service ollama.service semena-freetoken-qwen36.service
 Wants=network-online.target
 
 [Service]
@@ -11,4 +11,3 @@ RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
-

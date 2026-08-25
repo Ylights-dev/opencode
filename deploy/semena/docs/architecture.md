@@ -18,20 +18,20 @@ Employee Windows account
   -> one-time enrollment with Open WebUI email/password over TLS
   -> per-user API key
   -> TLS gateway with per-user API-key authentication on 10.1.50.101
-  -> Ollama on 127.0.0.1:11434
-  -> semena-gemma4 (Gemma 4 12B, 32768-token context)
+  -> FreeToken on 127.0.0.1:1919
+  -> semena-qwen36 (Qwen3.6 35B-A3B NVFP4, 57344-token context)
 ```
 
 OpenCode runs on the employee computer so its file and shell tools operate on
 that employee's workspace. The model gateway authenticates each user separately,
-can revoke a single key, and prevents direct employee access to Ollama.
+can revoke a single key, and prevents direct employee access to the model runtime.
 
 ## Security boundary
 
 - One key per employee; no shared OpenCode server password.
 - Open WebUI is the identity source; passwords are verified during enrollment
   and are never stored by the Semena gateway.
-- Ollama is bound to the server and must not be the employee-facing endpoint.
+- FreeToken is bound to the server and must not be the employee-facing endpoint.
 - OpenCode permissions allow read/edit/write/search/shell tools in the active
   project workspace and ask before accessing external directories.
 - OpenClaw is reserved for a separately isolated administrator gateway if ACP

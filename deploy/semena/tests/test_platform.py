@@ -33,7 +33,11 @@ class ClientConfigTests(unittest.TestCase):
 
     def test_only_corporate_provider_is_enabled(self) -> None:
         self.assertEqual(self.config["enabled_providers"], ["semena"])
-        self.assertEqual(self.config["model"], "semena/semena-gemma4")
+        self.assertEqual(self.config["model"], "semena/semena-qwen36")
+        self.assertEqual(self.config["small_model"], "semena/semena-qwen36")
+        model = self.config["provider"]["semena"]["models"]["semena-qwen36"]
+        self.assertEqual(model["options"]["reasoningEffort"], "none")
+        self.assertEqual(model["limit"]["context"], 57344)
 
     def test_agent_can_choose_tools_and_shell_is_fallback(self) -> None:
         permission = self.config["permission"]
@@ -45,6 +49,41 @@ class ClientConfigTests(unittest.TestCase):
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_freetoken_qwen36_is_model_scoped_and_gpu_exclusive(self) -> None:
+        config = json.loads((ROOT / "freetoken" / "opencode.pilot.json").read_text(encoding="utf-8"))
+        model = config["provider"]["semena"]["models"]["semena-qwen36"]
+        launcher = (ROOT / "freetoken" / "start-qwen36-pilot.sh").read_text(encoding="utf-8")
+        service = (ROOT / "systemd" / "semena-freetoken-qwen36.service").read_text(encoding="utf-8")
+
+        self.assertEqual(config["model"], "semena/semena-qwen36")
+        self.assertEqual(config["provider"]["semena"]["options"]["baseURL"], "https://10.1.50.101:8443/v1")
+        self.assertEqual(config["provider"]["semena"]["options"]["apiKey"], "{env:SEMENA_AGENT_API_KEY}")
+        self.assertEqual(model["options"]["reasoningEffort"], "none")
+        self.assertEqual(model["limit"]["context"], 57344)
+        self.assertIn("Refusing to start: unload all Ollama models first", launcher)
+        self.assertIn('--host "${FREETOKEN_HOST:-0.0.0.0}"', launcher)
+        self.assertIn("--num-tokens 57344", launcher)
+        self.assertIn("--kv-reserve-tokens 57344", launcher)
+        self.assertIn("--moe-backend hybrid", launcher)
+        self.assertIn("--max-running-requests 1", launcher)
+        self.assertIn("Conflicts=ollama.service", service)
+        self.assertIn("FREETOKEN_PORT=1919", service)
+
+    def test_gateway_routes_production_traffic_to_freetoken(self) -> None:
+        nginx = (ROOT / "nginx.conf").read_text(encoding="utf-8")
+        self.assertIn("proxy_pass http://host.docker.internal:1919;", nginx)
+        self.assertNotIn("proxy_pass http://host.docker.internal:11434;", nginx)
+
+    def test_legacy_ollama_model_artifacts_are_removed(self) -> None:
+        self.assertFalse((ROOT / "opencode.direct.json").exists())
+        models = list((ROOT / "models").glob("*.Modelfile")) if (ROOT / "models").exists() else []
+        self.assertEqual(models, [])
+
+    def test_opencode_e2e_uses_qwen36_runtime(self) -> None:
+        script = (ROOT / "scripts" / "e2e_opencode.sh").read_text(encoding="utf-8")
+        self.assertIn("--model semena/semena-qwen36", script)
+        self.assertNotIn("--model semena/semena-gemma4", script)
+
     def test_gateway_only_publishes_tls_port(self) -> None:
         compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
         self.assertNotRegex(compose, r'(?m)^\s+-\s*["\']?4000:4000')
@@ -55,6 +94,9 @@ class DeploymentTests(unittest.TestCase):
         candidates = [
             ROOT / "compose.yaml",
             ROOT / "auth_server.py",
+            ROOT / "nginx.conf",
+            ROOT / "freetoken" / "opencode.pilot.json",
+            ROOT / "systemd" / "semena-freetoken-qwen36.service",
             ROOT / "client" / "Служебные файлы" / "agent-config.json",
         ]
         secret = re.compile(r"(?:ghp_|github_pat_|sk-[A-Za-z0-9_-]{20,})")
@@ -248,10 +290,13 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("openssl rand", bootstrap)
 
     def test_model_has_required_context(self) -> None:
-        modelfile = (ROOT / "models" / "gemma4.Modelfile").read_text(encoding="utf-8")
-        self.assertIn("FROM gemma4:12b", modelfile)
-        self.assertIn("PARAMETER num_ctx 32768", modelfile)
-        self.assertIn("PARAMETER temperature 0.2", modelfile)
+        config = json.loads((ROOT / "client" / "Служебные файлы" / "agent-config.json").read_text(encoding="utf-8"))
+        model = config["provider"]["semena"]["models"]["semena-qwen36"]
+        launcher = (ROOT / "freetoken" / "start-qwen36-pilot.sh").read_text(encoding="utf-8")
+        self.assertEqual(model["limit"]["context"], 57344)
+        self.assertEqual(model["limit"]["output"], 4096)
+        self.assertIn("--max-seq-len-override 57344", launcher)
+        self.assertIn("--kv-reserve-tokens 57344", launcher)
 
     def test_ca_has_explicit_signing_extensions(self) -> None:
         script = (ROOT / "scripts" / "generate_tls.sh").read_text(encoding="utf-8")
@@ -260,7 +305,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_firewall_blocks_employee_bypass_but_keeps_infrastructure(self) -> None:
         rules = (ROOT / "firewall.nft").read_text(encoding="utf-8")
-        self.assertIn("tcp dport 11434 drop", rules)
+        self.assertIn("tcp dport { 11434, 1919 } drop", rules)
         self.assertIn("10.1.50.47", rules)
         self.assertIn("172.16.0.0/12", rules)
         self.assertNotIn("10.1.50.0/24", rules)

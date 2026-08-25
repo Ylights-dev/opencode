@@ -1,0 +1,25 @@
+{
+  "version": 4,
+  "timestamp": "2026-08-24T12:08:34+07:00",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5060 Ti"
+  },
+  "cpu": {
+    "physical_cores": 8,
+    "threads_used": 4
+  },
+  "threshold": 2.0,
+  "ceilings": {
+    "cpu_stream_read_gbs": 33.55,
+    "pcie_linear_h2d_gbs": 7.23,
+    "pcie_linear_d2h_gbs": 7.15
+  },
+  "qwen36_nvfp4": {
+    "cpu_moe_gbs": 14.92,
+    "pcie_gather_gbs": 6.71,
+    "cpu_moe_overlap_gbs": 13.71,
+    "pcie_gather_overlap_gbs": 6.7,
+    "ratio": 2.224,
+    "recommended": "hybrid"
+  }
+}

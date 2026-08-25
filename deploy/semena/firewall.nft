@@ -2,15 +2,14 @@ table inet semena_opencode_guard {
   chain input {
     type filter hook input priority -5; policy accept;
 
-    tcp dport 11434 ip saddr {
+    tcp dport { 11434, 1919 } ip saddr {
       127.0.0.0/8,
       10.1.50.40,
       10.1.50.47,
       10.1.50.101,
       172.16.0.0/12
     } accept
-    tcp dport 11434 ip6 saddr ::1 accept
-    tcp dport 11434 drop
+    tcp dport { 11434, 1919 } ip6 saddr ::1 accept
+    tcp dport { 11434, 1919 } drop
   }
 }
-

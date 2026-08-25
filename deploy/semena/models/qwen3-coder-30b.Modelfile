@@ -1,6 +1,0 @@
-FROM qwen3-coder:30b
-
-PARAMETER num_ctx 16384
-PARAMETER temperature 0.15
-PARAMETER top_p 0.9
-PARAMETER repeat_penalty 1.05

@@ -1,0 +1,22 @@
+[Unit]
+Description=Semena Qwen3.6 35B FreeToken runtime
+Documentation=https://github.com/FlashML-org/FreeToken
+After=network-online.target docker.service
+Wants=network-online.target
+Conflicts=ollama.service
+
+[Service]
+Type=simple
+User=installer
+WorkingDirectory=/home/installer/freetoken-pilot
+Environment=FREETOKEN_ROOT=/home/installer/freetoken-pilot
+Environment=FREETOKEN_PORT=1919
+Environment=FREETOKEN_HOST=0.0.0.0
+ExecStart=/home/installer/freetoken-pilot/run/start-qwen36-pilot.sh
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

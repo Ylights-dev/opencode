@@ -6,14 +6,14 @@
   "provider": {
     "semena": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Семена для Сибири - локальная модель",
+      "name": "Semena FreeToken pilot",
       "options": {
         "baseURL": "https://10.1.50.101:8443/v1",
         "apiKey": "{env:SEMENA_AGENT_API_KEY}"
       },
       "models": {
         "semena-qwen36": {
-          "name": "Семена Qwen 35B",
+          "name": "Semena Qwen3.6 35B-A3B NVFP4",
           "options": {
             "reasoningEffort": "none"
           },
@@ -24,21 +24,5 @@
         }
       }
     }
-  },
-  "permission": {
-    "external_directory": "ask",
-    "bash": "allow",
-    "webfetch": "allow",
-    "websearch": "allow",
-    "edit": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "list": "allow",
-    "task": "allow",
-    "todowrite": "allow",
-    "lsp": "allow",
-    "skill": "allow",
-    "read": "allow",
-    "write": "allow"
   }
 }

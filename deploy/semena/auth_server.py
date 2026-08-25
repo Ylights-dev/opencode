@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small, auditable API-key boundary for the employee-facing Ollama endpoint."""
+"""Small, auditable API-key boundary for the employee-facing model endpoint."""
 
 from __future__ import annotations
 
