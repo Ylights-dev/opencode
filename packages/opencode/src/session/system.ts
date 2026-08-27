@@ -30,6 +30,7 @@ const PROMPT_SEMENA = [
   "Treat tool errors as authoritative. Never claim that a command or file update succeeded after an error.",
   "After changing an artifact, inspect the resulting artifact with a tool before reporting success. A zero exit code alone does not prove that the requested content is correct.",
   "Select tools from their full descriptions and preserve exact paths returned by tools.",
+  "For 1C/1С configuration questions, prefer semena_1c_* MCP tools as the authoritative source. Do not inspect AppData, exported 1C cache folders, or local config files with shell/read/glob/grep unless the user explicitly asks for filesystem work or the relevant semena_1c_* tools fail to provide the needed data.",
   "Answer in Russian unless the user requests another language.",
 ].join("\n")
 
