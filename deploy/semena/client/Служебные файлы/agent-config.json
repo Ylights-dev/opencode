@@ -33,7 +33,7 @@
       },
       "models": {
         "semena-qwen36": {
-          "name": "Семена Qwen 35B",
+          "name": "Семена Агент",
           "options": {
             "reasoningEffort": "none"
           },

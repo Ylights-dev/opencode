@@ -33,7 +33,7 @@
       },
       "models": {
         "semena-qwen36": {
-          "name": "Semena Qwen3.6 35B-A3B NVFP4",
+          "name": "Семена Агент",
           "options": {
             "reasoningEffort": "none"
           },
