@@ -6,9 +6,13 @@
   "mcp": {
     "semena_1c": {
       "type": "remote",
-      "url": "http://10.1.50.40:3001/sse",
+      "url": "http://10.1.50.40:3000/sse",
       "enabled": true,
       "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:ONEC_MCP_API_KEY}",
+        "X-API-Key": "{env:ONEC_MCP_API_KEY}"
+      },
       "timeout": 45000
     },
     "semena_image": {

@@ -45,14 +45,16 @@ class ClientConfigTests(unittest.TestCase):
         self.assertEqual(permission["bash"], "allow")
         for tool in ["edit", "glob", "grep", "list", "task", "todowrite", "lsp", "skill", "webfetch", "websearch", "read", "write"]:
             self.assertEqual(permission[tool], "allow", tool)
-        self.assertEqual(permission["semena_1c_onec_*"], "allow")
+        self.assertEqual(permission["semena_1c_*"], "allow")
         self.assertEqual(permission["semena_image_image_*"], "allow")
         self.assertNotIn("instructions", self.config)
 
     def test_client_connects_existing_1c_mcp_server(self) -> None:
         mcp = self.config["mcp"]["semena_1c"]
         self.assertEqual(mcp["type"], "remote")
-        self.assertEqual(mcp["url"], "http://10.1.50.40:3001/sse")
+        self.assertEqual(mcp["url"], "http://10.1.50.40:3000/sse")
+        self.assertEqual(mcp["headers"]["Authorization"], "Bearer {env:ONEC_MCP_API_KEY}")
+        self.assertEqual(mcp["headers"]["X-API-Key"], "{env:ONEC_MCP_API_KEY}")
         self.assertTrue(mcp["enabled"])
         self.assertFalse(mcp["oauth"])
         self.assertEqual(mcp["timeout"], 45000)
@@ -86,7 +88,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("--max-running-requests 1", launcher)
         self.assertIn("Conflicts=ollama.service", service)
         self.assertIn("FREETOKEN_PORT=1919", service)
-        self.assertEqual(config["mcp"]["semena_1c"]["url"], "http://10.1.50.40:3001/sse")
+        self.assertEqual(config["mcp"]["semena_1c"]["url"], "http://10.1.50.40:3000/sse")
+        self.assertEqual(config["mcp"]["semena_1c"]["headers"]["X-API-Key"], "{env:ONEC_MCP_API_KEY}")
         self.assertEqual(config["mcp"]["semena_image"]["url"], "http://10.1.50.40:3003/sse")
 
     def test_image_edit_mcp_service_is_qwen_2511_local(self) -> None:
@@ -238,9 +241,9 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("full descriptions", system)
         self.assertIn('return [PROMPT_SEMENA, PROMPT_DEFAULT]', system)
         self.assertIn("SEMENA_TOOL_ALLOWLIST", request)
-        self.assertIn('tool.startsWith("semena_1c_onec_")', request)
+        self.assertIn('tool.startsWith("semena_1c_")', request)
         self.assertIn('tool.startsWith("semena_image_image_")', request)
-        self.assertNotIn('tool.startsWith("semena_1c_") ||', request)
+        self.assertNotIn('tool.startsWith("semena_1c_onec_")', request)
         self.assertNotIn('tool.startsWith("semena_image_") ||', request)
         self.assertNotIn("compactTools", request)
 
