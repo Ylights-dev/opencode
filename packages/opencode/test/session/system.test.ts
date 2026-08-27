@@ -9,6 +9,7 @@ import type { Provider } from "../../src/provider/provider"
 import { SystemPrompt } from "../../src/session/system"
 import { MCP } from "../../src/mcp"
 import { testEffect } from "../lib/effect"
+import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 
 const skills: Skill.Info[] = [
   {
@@ -54,6 +55,25 @@ const it = testEffect(
     [
       MCP.node,
       Layer.mock(MCP.Service, {
+        tools: () =>
+          Effect.succeed({
+            tool_server_search: {
+              def: {
+                name: "search",
+                description: "Search records.",
+                inputSchema: { type: "object", properties: {} },
+              } as MCPToolDef,
+              client: {} as MCP.McpTool["client"],
+            },
+            tool_server_update: {
+              def: {
+                name: "update",
+                description: "Update records.",
+                inputSchema: { type: "object", properties: {} },
+              } as MCPToolDef,
+              client: {} as MCP.McpTool["client"],
+            },
+          }),
         instructions: () =>
           Effect.succeed([
             {
@@ -64,7 +84,7 @@ const it = testEffect(
             {
               name: "tool-server",
               instructions: "Prefer search before update.",
-              tools: ["tool-server_search", "tool-server_update"],
+              tools: ["tool_server_search", "tool_server_update"],
             },
           ]),
       }),
@@ -151,6 +171,11 @@ describe("session.system", () => {
           '  <server name="tool-server">',
           "    Prefer search before update.",
           "  </server>",
+          "  <available_tools>",
+          "    MCP tools are model tools, not shell commands. Call them directly by their exact tool name; do not use bash, PowerShell, curl, or filesystem search to check whether an MCP tool exists.",
+          "    - tool_server_search: Search records.",
+          "    - tool_server_update: Update records.",
+          "  </available_tools>",
           "</mcp_instructions>",
         ].join("\n"),
       )
@@ -160,7 +185,7 @@ describe("session.system", () => {
   it.effect("MCP output omits servers when all advertised tools are denied", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
-      const output = yield* prompt.mcp(build, Permission.fromConfig({ "tool-server_*": "deny" }))
+      const output = yield* prompt.mcp(build, Permission.fromConfig({ "tool_server_*": "deny" }))
 
       expect(output).toBe(
         [

@@ -132,10 +132,15 @@ const layer = Layer.effect(
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {
         const ruleset = Permission.merge(agent.permission, permission ?? [])
+        const tools = yield* mcp.tools()
+        const disabled = Permission.disabled(Object.keys(tools), ruleset)
         const instructions = (yield* mcp.instructions()).filter(
           (item) => item.tools.length === 0 || Permission.disabled(item.tools, ruleset).size < item.tools.length,
         )
-        if (instructions.length === 0) return
+        const toolEntries = Object.entries(tools)
+          .filter(([name]) => !disabled.has(name))
+          .toSorted(([a], [b]) => a.localeCompare(b))
+        if (instructions.length === 0 && toolEntries.length === 0) return
 
         return [
           "<mcp_instructions>",
@@ -144,6 +149,17 @@ const layer = Layer.effect(
             ...item.instructions.split("\n").map((line) => `    ${line}`),
             "  </server>",
           ]),
+          ...(toolEntries.length === 0
+            ? []
+            : [
+                "  <available_tools>",
+                "    MCP tools are model tools, not shell commands. Call them directly by their exact tool name; do not use bash, PowerShell, curl, or filesystem search to check whether an MCP tool exists.",
+                ...toolEntries.map(([name, entry]) => {
+                  const description = entry.def.description?.trim()
+                  return description ? `    - ${name}: ${description}` : `    - ${name}`
+                }),
+                "  </available_tools>",
+              ]),
           "</mcp_instructions>",
         ].join("\n")
       }),

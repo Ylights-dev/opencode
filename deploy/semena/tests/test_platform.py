@@ -239,6 +239,8 @@ class DeploymentTests(unittest.TestCase):
         )
         self.assertIn('model.providerID === "semena"', system)
         self.assertIn("full descriptions", system)
+        self.assertIn("<available_tools>", system)
+        self.assertIn("MCP tools are model tools, not shell commands", system)
         self.assertIn('return [PROMPT_SEMENA, PROMPT_DEFAULT]', system)
         self.assertIn("SEMENA_TOOL_ALLOWLIST", request)
         self.assertIn('tool.startsWith("semena_1c_")', request)

@@ -113,6 +113,15 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      const preparedToolNames = Object.keys(prepared.tools)
+      yield* Effect.logInfo("prepared tools", {
+        providerID: input.model.providerID,
+        modelID: input.model.id,
+        "session.id": input.sessionID,
+        count: preparedToolNames.length,
+        semena_1c: preparedToolNames.filter((name) => name.startsWith("semena_1c_")).join(","),
+        sample: preparedToolNames.slice(0, 40).join(","),
+      })
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
