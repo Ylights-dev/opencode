@@ -52,7 +52,7 @@ class ClientConfigTests(unittest.TestCase):
     def test_client_connects_existing_1c_mcp_server(self) -> None:
         mcp = self.config["mcp"]["semena_1c"]
         self.assertEqual(mcp["type"], "remote")
-        self.assertEqual(mcp["url"], "http://10.1.50.101:3001/sse")
+        self.assertEqual(mcp["url"], "http://10.1.50.40:3001/sse")
         self.assertTrue(mcp["enabled"])
         self.assertFalse(mcp["oauth"])
         self.assertEqual(mcp["timeout"], 45000)
@@ -86,7 +86,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("--max-running-requests 1", launcher)
         self.assertIn("Conflicts=ollama.service", service)
         self.assertIn("FREETOKEN_PORT=1919", service)
-        self.assertEqual(config["mcp"]["semena_1c"]["url"], "http://10.1.50.101:3001/sse")
+        self.assertEqual(config["mcp"]["semena_1c"]["url"], "http://10.1.50.40:3001/sse")
         self.assertEqual(config["mcp"]["semena_image"]["url"], "http://10.1.50.40:3003/sse")
 
     def test_image_edit_mcp_service_is_qwen_2511_local(self) -> None:

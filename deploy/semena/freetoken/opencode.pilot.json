@@ -6,7 +6,7 @@
   "mcp": {
     "semena_1c": {
       "type": "remote",
-      "url": "http://10.1.50.101:3001/sse",
+      "url": "http://10.1.50.40:3001/sse",
       "enabled": true,
       "oauth": false,
       "timeout": 45000

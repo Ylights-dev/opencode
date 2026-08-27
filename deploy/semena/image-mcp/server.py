@@ -270,10 +270,6 @@ async def handle_sse(request):
         await server.run(streams[0], streams[1], server.create_initialization_options())
 
 
-async def handle_messages(request):
-    await sse.handle_post_message(request.scope, request.receive, request._send)
-
-
 async def api_health(request):
     return JSONResponse(_health_payload())
 
@@ -304,7 +300,7 @@ routes = [
     Route("/api/tool/{name}", endpoint=api_tool, methods=["POST"]),
     Route("/api/output/{name}", endpoint=api_output),
     Route("/sse", endpoint=handle_sse),
-    Route("/messages/", endpoint=handle_messages, methods=["POST"]),
+    Mount("/messages/", app=sse.handle_post_message),
     Mount("/output", app=StaticFiles(directory=str(OUTPUT_DIR), html=False), name="output"),
 ]
 
