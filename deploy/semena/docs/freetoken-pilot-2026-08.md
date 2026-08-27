@@ -1,6 +1,6 @@
 # FreeToken pilot for the Semena agent
 
-Assessment date: 2026-08-24.
+Assessment dates: 2026-08-24 through 2026-08-27.
 
 ## Decision
 
@@ -16,6 +16,10 @@ to both local model ports from employee workstations. Ollama remains installed
 only as an empty runtime shell: the old local Gemma/Qwen model catalog was
 removed after the Qwen36 cutover, and `ollama.service` is inactive during
 production service.
+
+As of 2026-08-27 this is the stable Semena Agent runtime. The employee UI hides
+the implementation name and shows the model as `Семена Агент`; the internal API
+model id remains `semena/semena-qwen36`.
 
 DeepSeek V4 Flash is not viable on this host: its expert pool needs roughly
 140 GB of host RAM, while this machine has 32 GB. FreeToken does not turn an
@@ -140,17 +144,18 @@ Open WebUI's built-in arena picker is disabled with `evaluation.arena.enable=fal
 The previous database was backed up as
 `webui.before_qwen36_only_20260824_170009.db` before the cleanup.
 
-## Production follow-up
+## Production status
 
-1. Rebuild and publish the Windows installer so existing desktops receive the
-   `semena-qwen36` client config.
-2. Run the full file, spreadsheet, shell-error, and web-research regression
-   suite against the authenticated gateway.
-3. Keep one running request and explicit 57K KV capacity until soak tests prove
-   higher context or concurrency safe. Use the 49K launcher backup as the stable
-   rollback point if long-prefill latency or FreeToken beta behavior regresses.
-4. Add startup and request watchdogs for current FreeToken beta failure modes:
-   backend death, over-capacity prompts, and stalled prefill.
+The Windows client config now points only at `semena/semena-qwen36` and displays
+that model as `Семена Агент`. The old model aliases are intentionally absent
+from the employee picker.
+
+Keep one running request and explicit 57K KV capacity until soak tests prove
+higher context or concurrency safe. Use the 49K launcher backup as the runtime
+rollback point if long-prefill latency or FreeToken beta behavior regresses.
+
+Startup/request watchdogs remain useful follow-up work for FreeToken beta
+failure modes: backend death, over-capacity prompts, and stalled prefill.
 
 References: [FreeToken](https://github.com/FlashML-org/FreeToken),
 [Qwen3.6 NVFP4](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4), and known

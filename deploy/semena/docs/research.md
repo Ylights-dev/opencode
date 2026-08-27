@@ -1,125 +1,60 @@
-# OpenCode and OpenClaw assessment
+# OpenCode, OpenClaw, And Model Research
 
-Assessment date: 2026-08-09.
+Updated: 2026-08-27.
 
-## OpenCode
+## Harness Decision
 
-- Upstream: https://github.com/anomalyco/opencode
-- License: MIT.
-- Evaluated release: 1.18.15.
-- Supports Ollama through an OpenAI-compatible provider and exposes terminal,
-  desktop, headless server, and web clients.
-- The built-in network authentication is one Basic Auth username/password for a
-  server. It is not employee identity or workspace isolation.
-- OpenCode permissions can deny or ask for external paths. The employee profile
-  now allows shell/scripts and the built-in agent tools inside the active project
-  because the product requirement is full local automation in the selected
-  working folder. Access outside that folder remains an explicit prompt through
-  `external_directory`.
+Use the Semena OpenCode fork locally on each employee PC. Do not put OpenClaw in the employee request path.
 
-## OpenClaw
+OpenClaw can dispatch OpenCode through ACP, but its documented boundary is one trusted operator per gateway. It does not solve employee identity, local workspace access, or tenant isolation for this deployment.
 
-- Upstream: https://github.com/openclaw/openclaw
-- License: MIT.
-- OpenClaw can launch OpenCode through the official ACPX backend.
-- Its security documentation explicitly defines one trusted operator boundary
-  per Gateway and says it is not a hostile multi-user tenant boundary. Separate
-  gateways and preferably separate OS users or hosts are required for different
-  trust boundaries.
-- Adding OpenClaw between employees and OpenCode would add another privileged
-  gateway without solving company authentication. It remains a possible isolated
-  administrator channel, not part of this employee deployment.
+## Current Stable Model
 
-## Live model evaluation
+The stable model is:
 
-`qwen3:30b-a3b` with the previous 4096-token runtime context failed the strict
-edit test: it confused the workspace path and wrote an empty file elsewhere.
+```text
+Internal id:   semena/semena-qwen36
+User label:    Семена Агент
+Runtime:       FreeToken
+Context:       57344 tokens
+Output:        4096 tokens
+```
 
-`qwen3.5:9b` was initially installed as `semena-code` with a 16384-token context and low
-temperature. After adding explicit guidance about OpenCode's line-number display
-and edit argument names, it passed three independent edit cases and the external
-directory boundary test through the authenticated TLS gateway.
+The exact model family and parameter count are intentionally not shown in the normal UI. They remain implementation details.
 
-On 2026-08-11 the live Excel/tool-use failure was reproduced with a dedicated
-Ollama tool-calling evaluation. `qwen3.5:9b`, `qwen3:14b`, `qwen3:30b-a3b`, and
-`semena-assistant` all failed to produce the expected verified top-level Excel
-list. `gemma4:12b` passed the same scenario through Ollama and then through the
-authenticated TLS gateway. The employee client now selects the `semena-gemma4`
-Ollama alias so the runtime keeps Gemma's renderer/parser while forcing a
-16384-token context instead of the default 4096-token slot.
+## Rejected Or Superseded Models
 
-The live OpenCode regression was also repeated with `qwen3:30b-a3b` and the
-official `qwen3-coder:30b`. Both models used a 16384-token context. The first
-created a script with a hard-coded year instead of using registry evidence. The
-coder model explored the official site but then generated demo scripts that
-returned `нету` for every row. Neither model is safe as the employee default.
+These variants were evaluated during the project and are not part of the stable employee picker:
 
-Muse Glimmer 30B remains relevant to this product because it is positioned for
-autonomous local agents, reliable tool use, multi-step reasoning, and failure
-recovery. The 19 GB `UD-Q4_K_XL` GGUF was downloaded and tested on 2026-08-11,
-but Ollama 0.30.10 terminated before inference with `unknown model
-architecture: 'muse-glimmer'`. It therefore cannot be evaluated or deployed on
-the current supported inference stack. Do not replace Ollama solely for this
-candidate until its architecture is supported and the same tool-use evaluation
-passes.
+- `qwen3.5:9b` / `semena-code` - could pass some edit cases but failed broader tool-use and Excel scenarios.
+- `qwen3:14b` - failed the strict spreadsheet/tool-use evaluation.
+- `qwen3:30b-a3b` - failed earlier with low context and later still made unreliable tool decisions.
+- `qwen3-coder:30b` - searched correctly in some cases but generated incorrect demo-like scripts in production-style tasks.
+- `semena-assistant` old alias - removed from the stable picker.
+- `gemma4:12b` / `semena-gemma4` - useful earlier baseline, now superseded by FreeToken Qwen36.
+- Muse Glimmer 30B - promising model card, but not deployable on the supported inference stack at the time of testing.
+- DeepSeek V4 Flash - not viable on the current 32 GB RAM host.
 
-The OpenCode fork now keeps the employee's original request in durable session
-metadata, carries it through compaction, and checks completion against tool
-evidence. Tasks that require current external data, a changed artifact, and
-verification must perform those phases in that order. Repeated inspection is
-interrupted by a bounded progress watchdog. A helper script, a failed command,
-or an unverified file is no longer accepted as the requested result. These are
-model-independent orchestration guards; they do not add a registry-specific
-workflow or replace the model's general reasoning.
+## Why Qwen36/FreeToken Stayed
 
-## Decision
+The current FreeToken runtime showed materially better local-agent behavior:
 
-Use OpenCode locally on each employee PC and connect it to the authenticated
-gateway on `10.1.50.101:8443`. A local OpenCode process is required because a
-central OpenCode server cannot see employee-local files and does not isolate
-employee sessions.
+- native tool selection;
+- recovery after failed tool calls;
+- verified file mutation loop;
+- large-context marker tests up to the selected 57K production context;
+- successful OpenCode MCP catalog exposure and 1C tool calls.
 
-Do not deploy OpenClaw in the employee request path. Do not expose Ollama port
-11434 to employee workstations.
+The selected setup is still constrained to one running request and explicit context capacity until longer soak tests justify higher concurrency.
 
-## DeepSeek Harness follow-up
+## 1C Direction
 
-Follow-up assessment date: 2026-08-18.
+1C functionality must be handled through the existing MCP server, not through ad hoc local filesystem exploration. The stable client exposes `semena_1c_*` tools and instructs the model to use them as the authoritative source for 1C metadata, modules, registers, and BSL code.
 
-The name "DeepSeek Harness" currently refers to multiple unrelated projects.
-The protocol adapter at `HenryZ838978/deepseek-harness` primarily preserves
-DeepSeek V4 `reasoning_content`, streaming tool-call indexes, and cache behavior;
-it is not a replacement desktop coding agent. Those protocol corrections do not
-improve the Gemma-based `semena-gemma4` model.
+The weather investigation in `ЗаданиеНаПеревозку` demonstrated the intended path: search and inspect through MCP, then answer from observed configuration facts.
 
-The former `morlay/deepseek-harness` project now points to `morlay/playpen`. Its
-agent loop has useful ideas: a compact tool set, up to 200 tool turns, orphaned
-tool-call recovery, profiles, and an OpenAI-compatible endpoint. It is not yet a
-drop-in corporate Windows replacement: the current source has no Windows release,
-expects a Rust/MSVC build environment, uses Unix-oriented configuration path
-fallbacks, and documents its OS sandbox primarily for macOS.
+## Remaining Product Boundary
 
-The official `deepseek-ai/awesome-deepseek-agent` repository is a catalog of
-integrations, not an official standalone DeepSeek Harness. It lists OpenCode
-alongside Pi, DeepSeek-TUI/CodeWhale, Reasonix, and other clients.
+This deployment proves the general local agent loop: local files, scripts, spreadsheets, MCP tools, identity, revocation, TLS, and network isolation.
 
-CodeWhale (formerly DeepSeek-TUI) is the most credible future comparison because
-it provides Windows binaries, a Windows sandbox, session recovery, an HTTP
-runtime, local OpenAI-compatible providers, and recursive large-input tooling.
-It remains optimized for DeepSeek V4. Its DeepSeek-specific advantages do not
-automatically transfer to a local Gemma 12B model.
-
-Decision: keep the Semena OpenCode fork as the production harness. The useful
-harness properties identified during this review--a small provider-scoped tool
-set, disabled hidden reasoning, durable sessions, and explicit verification--are
-already present in the current fork. Consider CodeWhale only as an isolated A/B
-benchmark candidate, using the same Semena model, gateway, workspace, prompts,
-and pass/fail criteria.
-
-## Remaining product boundary
-
-This deployment proves the agent loop, local file edits, identity, revocation,
-TLS, script execution, and network isolation. OpenCode does not automatically reproduce the old
-agent's domain-specific Excel, Word, registry, SQL, and 1C operations. Those
-capabilities should be migrated as narrowly scoped tools or skills with their own
-tests; arbitrary shell access is available in the active project workspace.
+Domain-specific business workflows should continue to move into tools or skills with their own tests. Do not hardcode task-specific scripts into the model prompt.
