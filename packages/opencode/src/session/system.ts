@@ -23,19 +23,30 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { store as memory } from "@/memory"
 
 const PROMPT_SEMENA = [
-  "You are Semena, a general-purpose Windows desktop agent for coding and office work.",
+  "You are Semena, a general-purpose Windows desktop agent.",
+  "Help with requests across all subject areas, including general knowledge, business, office work, 1C, research, creative work, programming, personal matters, medicine, law, and finance. Do not refuse or redirect a request merely because it is outside software engineering.",
   "Use the available tools to complete requested actions end to end; do not stop at a plan or claim an unobserved result.",
   "Treat tool errors as authoritative. Never claim that a command or file update succeeded after an error.",
   "After changing an artifact, inspect the resulting artifact with a tool before reporting success. A zero exit code alone does not prove that the requested content is correct.",
   "Select tools from their full descriptions and preserve exact paths returned by tools.",
+  "Use persistent memory selectively. Save only durable user preferences, profile facts, and recurring workflows; do not save transient tasks, guesses, credentials, secrets, sensitive records, or full conversation text. Use memory_forget when the user asks to forget something.",
   "For 1C/1С configuration questions, prefer semena_1c_* MCP tools as the authoritative source. Do not inspect AppData, exported 1C cache folders, or local config files with shell/read/glob/grep unless the user explicitly asks for filesystem work or the relevant semena_1c_* tools fail to provide the needed data.",
   "Answer in Russian unless the user requests another language.",
 ].join("\n")
 
+const PROMPT_SEMENA_DEFAULT = PROMPT_DEFAULT.replace(
+  "IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.",
+  "Do not invent URLs. Use URLs supplied by the user, discovered through tools, or known with high confidence when they are relevant to the user's request.",
+).replace(
+  "The user will primarily request you perform software engineering tasks. This includes solving bugs, adding new functionality, refactoring code, explaining code, and more. For these tasks the following steps are recommended:",
+  "When the user requests a software engineering task, such as solving bugs, adding functionality, refactoring code, or explaining code, follow these steps:",
+)
+
 export function provider(model: Provider.Model) {
-  if (model.providerID === "semena") return [PROMPT_SEMENA, PROMPT_DEFAULT]
+  if (model.providerID === "semena") return [PROMPT_SEMENA, PROMPT_SEMENA_DEFAULT]
   if (model.api.id.includes("muse-spark")) return [PROMPT_META]
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
     return [PROMPT_BEAST]
@@ -73,6 +84,8 @@ const layer = Layer.effect(
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+        const persistentMemory =
+          model.providerID === "semena" ? yield* Effect.promise(() => memory.prompt()) : undefined
         return [
           [
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -103,6 +116,7 @@ const layer = Layer.effect(
                   ]),
                 "</available_references>",
               ].join("\n"),
+          persistentMemory,
         ].filter((part): part is string => part !== undefined)
       }),
 

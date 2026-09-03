@@ -3,6 +3,17 @@
   "enabled_providers": ["semena"],
   "model": "semena/semena-qwen36",
   "small_model": "semena/semena-qwen36",
+  "tool_output": {
+    "max_lines": 500,
+    "max_bytes": 20000
+  },
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "tail_turns": 1,
+    "preserve_recent_tokens": 4096,
+    "reserved": 12288
+  },
   "mcp": {
     "semena_1c": {
       "type": "remote",
@@ -35,7 +46,10 @@
         "semena-qwen36": {
           "name": "Семена Агент",
           "options": {
-            "reasoningEffort": "none"
+            "reasoningEffort": "none",
+            "chat_template_kwargs": {
+              "enable_thinking": false
+            }
           },
           "limit": {
             "context": 57344,

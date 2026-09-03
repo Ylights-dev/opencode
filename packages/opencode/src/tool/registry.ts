@@ -56,6 +56,7 @@ import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 import { PythonTool } from "./python"
+import { MemoryForgetTool, MemoryListTool, MemorySaveTool } from "./memory"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -112,6 +113,9 @@ const layer = Layer.effect(
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const pythontool = yield* PythonTool
+    const memorylist = yield* MemoryListTool
+    const memorysave = yield* MemorySaveTool
+    const memoryforget = yield* MemoryForgetTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -218,6 +222,9 @@ const layer = Layer.effect(
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
           python: Tool.init(pythontool),
+          memorylist: Tool.init(memorylist),
+          memorysave: Tool.init(memorysave),
+          memoryforget: Tool.init(memoryforget),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -242,6 +249,9 @@ const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.python,
+            tool.memorylist,
+            tool.memorysave,
+            tool.memoryforget,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -291,6 +301,9 @@ const layer = Layer.effect(
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === PythonTool.id) return input.providerID === "semena"
+        if (tool.id === MemoryListTool.id || tool.id === MemorySaveTool.id || tool.id === MemoryForgetTool.id) {
+          return input.providerID === "semena"
+        }
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }

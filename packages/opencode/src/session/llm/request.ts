@@ -212,6 +212,9 @@ const SEMENA_TOOL_ALLOWLIST = new Set([
   "grep",
   "list",
   "lsp",
+  "memory_forget",
+  "memory_list",
+  "memory_save",
   "python",
   "read",
   "skill",
@@ -222,11 +225,7 @@ const SEMENA_TOOL_ALLOWLIST = new Set([
 ])
 
 function isSemenaAllowedTool(tool: string) {
-  return (
-    SEMENA_TOOL_ALLOWLIST.has(tool) ||
-    tool.startsWith("semena_1c_") ||
-    tool.startsWith("semena_image_image_")
-  )
+  return SEMENA_TOOL_ALLOWLIST.has(tool) || tool.startsWith("semena_1c_") || tool.startsWith("semena_image_image_")
 }
 
 function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user" | "model">) {

@@ -37,6 +37,7 @@ class ClientConfigTests(unittest.TestCase):
         self.assertEqual(self.config["small_model"], "semena/semena-qwen36")
         model = self.config["provider"]["semena"]["models"]["semena-qwen36"]
         self.assertEqual(model["options"]["reasoningEffort"], "none")
+        self.assertEqual(model["options"]["chat_template_kwargs"], {"enable_thinking": False})
         self.assertEqual(model["limit"]["context"], 57344)
 
     def test_agent_can_choose_tools_and_shell_is_fallback(self) -> None:
@@ -47,7 +48,21 @@ class ClientConfigTests(unittest.TestCase):
             self.assertEqual(permission[tool], "allow", tool)
         self.assertEqual(permission["semena_1c_*"], "allow")
         self.assertEqual(permission["semena_image_image_*"], "allow")
+        self.assertEqual(permission["memory"], "allow")
         self.assertNotIn("instructions", self.config)
+
+    def test_context_guard_leaves_room_for_tool_results(self) -> None:
+        self.assertEqual(self.config["tool_output"], {"max_lines": 500, "max_bytes": 20000})
+        self.assertEqual(
+            self.config["compaction"],
+            {
+                "auto": True,
+                "prune": True,
+                "tail_turns": 1,
+                "preserve_recent_tokens": 4096,
+                "reserved": 12288,
+            },
+        )
 
     def test_client_connects_existing_1c_mcp_server(self) -> None:
         mcp = self.config["mcp"]["semena_1c"]
@@ -79,7 +94,11 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(config["provider"]["semena"]["options"]["baseURL"], "https://10.1.50.101:8443/v1")
         self.assertEqual(config["provider"]["semena"]["options"]["apiKey"], "{env:SEMENA_AGENT_API_KEY}")
         self.assertEqual(model["options"]["reasoningEffort"], "none")
+        self.assertEqual(model["options"]["chat_template_kwargs"], {"enable_thinking": False})
         self.assertEqual(model["limit"]["context"], 57344)
+        self.assertEqual(config["tool_output"], {"max_lines": 500, "max_bytes": 20000})
+        self.assertEqual(config["compaction"]["reserved"], 12288)
+        self.assertEqual(config["compaction"]["tail_turns"], 1)
         self.assertIn("Refusing to start: unload all Ollama models first", launcher)
         self.assertIn('--host "${FREETOKEN_HOST:-0.0.0.0}"', launcher)
         self.assertIn("--num-tokens 57344", launcher)
@@ -153,8 +172,11 @@ class DeploymentTests(unittest.TestCase):
         installer = (ROOT / "client" / "onefile" / "Install-SemenaAgentEmbedded.ps1").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Введите e-mail от корпоративной веб-панели", installer)
-        self.assertIn("Введите пароль от корпоративной веб-панели", installer)
+        self.assertIn("Введите e-mail, указанный при регистрации", installer)
+        self.assertIn("Введите пароль", installer)
+        self.assertIn("http://10.1.50.101:3000/auth", installer)
+        self.assertIn("Зарегистрироваться в браузере", installer)
+        self.assertIn("Open-AgentRegistration", installer)
         self.assertIn("$ProgressPreference = 'SilentlyContinue'", installer)
         self.assertIn("https://10.1.50.101:8443/enroll", installer)
         self.assertIn("Invoke-RestMethod -Method Post", installer)
@@ -242,7 +264,11 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("<available_tools>", system)
         self.assertIn("MCP tools are model tools, not shell commands", system)
         self.assertIn("For 1C/1С configuration questions, prefer semena_1c_* MCP tools", system)
-        self.assertIn('return [PROMPT_SEMENA, PROMPT_DEFAULT]', system)
+        self.assertIn("requests across all subject areas", system)
+        self.assertIn("Do not refuse or redirect a request merely because it is outside software engineering", system)
+        self.assertIn('return [PROMPT_SEMENA, PROMPT_SEMENA_DEFAULT]', system)
+        self.assertIn("Use persistent memory selectively", system)
+        self.assertIn('"memory_save"', request)
         self.assertIn("SEMENA_TOOL_ALLOWLIST", request)
         self.assertIn('tool.startsWith("semena_1c_")', request)
         self.assertIn('tool.startsWith("semena_image_image_")', request)

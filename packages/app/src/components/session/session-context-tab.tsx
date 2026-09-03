@@ -1,4 +1,4 @@
-import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
+import { createMemo, createEffect, createSignal, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { checksum } from "@opencode-ai/core/util/encode"
@@ -100,6 +100,7 @@ export function SessionContextTab() {
   const sdk = useSDK()
   const providers = useProviders(() => sdk().directory)
   const { params, view } = useSessionLayout()
+  const [compacting, setCompacting] = createSignal(false)
 
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
 
@@ -249,6 +250,25 @@ export function SessionContextTab() {
     }
   }
 
+  const compactSession = async () => {
+    const sessionID = params.id
+    const model = visibleUserMessages().at(-1)?.model
+    if (!sessionID || !model || compacting()) return
+
+    setCompacting(true)
+    try {
+      await sdk().api.session.compact({ sessionID, model })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : language.t("common.requestFailed"),
+      })
+    } finally {
+      setCompacting(false)
+    }
+  }
+
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
@@ -308,6 +328,19 @@ export function SessionContextTab() {
       onScroll={handleScroll}
     >
       <div class="px-6 pt-4 pb-10 flex flex-col gap-10">
+        <div class="flex justify-end">
+          <Button
+            size="small"
+            variant="secondary"
+            class="gap-1.5"
+            disabled={compacting() || visibleUserMessages().length === 0}
+            onClick={compactSession}
+          >
+            <Icon name="collapse" size="small" />
+            <span>{language.t("command.session.compact")}</span>
+          </Button>
+        </div>
+
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
           <For each={stats}>
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}

@@ -12,6 +12,7 @@ $host.UI.RawUI.WindowTitle = 'Установка Семена - Агент'
 
 $expectedHash = '__SEMENA_DESKTOP_SETUP_SHA256__'
 $enrollUrl = 'https://10.1.50.101:8443/enroll'
+$registrationUrl = 'http://10.1.50.101:3000/auth'
 $runtimeRoot = Join-Path $env:LOCALAPPDATA 'Семена - Агент'
 $configRoot = Join-Path $runtimeRoot 'config\opencode'
 $sourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -25,6 +26,12 @@ $pythonWheelRoot = Join-Path $sourceRoot 'python-wheels'
 
 Write-Host 'Установка приложения «Семена - Агент»' -ForegroundColor Green
 Write-Host 'Приложение будет автоматически привязано к вашей учётной записи.'
+
+function Open-AgentRegistration {
+    Write-Host "Открываю регистрацию: $registrationUrl" -ForegroundColor Cyan
+    Start-Process $registrationUrl
+    [void](Read-Host 'Завершите регистрацию в браузере, затем нажмите Enter')
+}
 
 if (-not (Test-Path -LiteralPath $certificateSource)) {
     throw 'Во встроенном установщике отсутствует корпоративный сертификат.'
@@ -142,28 +149,57 @@ if (-not $ApiKey) {
 }
 
 if (-not $ApiKey) {
-    $email = (Read-Host 'Введите e-mail от корпоративной веб-панели').Trim().ToLowerInvariant()
-    if ($email -notmatch '^[^@\s]+@[^@\s]+$') {
-        throw 'Введите корректный e-mail.'
+    Write-Host ''
+    Write-Host 'Перед установкой нужна учётная запись Семена Агент.' -ForegroundColor Yellow
+    Write-Host '[1] Учётная запись уже есть'
+    Write-Host '[2] Зарегистрироваться в браузере'
+    while ($true) {
+        $accountChoice = (Read-Host 'Выберите 1 или 2').Trim()
+        if ($accountChoice -eq '1') {
+            break
+        }
+        if ($accountChoice -eq '2') {
+            Open-AgentRegistration
+            break
+        }
+        Write-Warning 'Введите 1, если учётная запись уже есть, или 2 для регистрации.'
     }
 
-    $securePassword = Read-Host 'Введите пароль от корпоративной веб-панели' -AsSecureString
-    $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-    try {
-        $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
-        $requestBody = @{ email = $email; password = $plainPassword } | ConvertTo-Json -Compress
+    while (-not $ApiKey) {
+        $email = (Read-Host 'Введите e-mail, указанный при регистрации').Trim().ToLowerInvariant()
+        if ($email -notmatch '^[^@\s]+@[^@\s]+$') {
+            Write-Warning 'Введите корректный e-mail.'
+            continue
+        }
+
+        $securePassword = Read-Host 'Введите пароль' -AsSecureString
+        $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
         try {
-            $enrollment = Invoke-RestMethod -Method Post -Uri $enrollUrl -ContentType 'application/json' -Body $requestBody
-            $ApiKey = $enrollment.key
+            $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+            $requestBody = @{ email = $email; password = $plainPassword } | ConvertTo-Json -Compress
+            try {
+                $enrollment = Invoke-RestMethod -Method Post -Uri $enrollUrl -ContentType 'application/json' -Body $requestBody
+                $ApiKey = $enrollment.key
+            }
+            catch {
+                Write-Warning 'Не удалось войти: учётная запись не найдена или пароль неверный.'
+                Write-Host '[1] Повторить ввод'
+                Write-Host '[2] Открыть регистрацию'
+                Write-Host '[0] Отменить установку'
+                $retryChoice = (Read-Host 'Выберите действие').Trim()
+                if ($retryChoice -eq '2') {
+                    Open-AgentRegistration
+                }
+                elseif ($retryChoice -eq '0') {
+                    throw 'Установка отменена. Сначала зарегистрируйтесь, затем запустите установщик снова.'
+                }
+            }
         }
-        catch {
-            throw 'Не удалось войти. Проверьте e-mail и пароль, затем запустите установку снова.'
+        finally {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
+            $plainPassword = $null
+            $requestBody = $null
         }
-    }
-    finally {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
-        $plainPassword = $null
-        $requestBody = $null
     }
 }
 
